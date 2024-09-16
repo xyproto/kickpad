@@ -7,12 +7,7 @@ import (
 	"image/color"
 	"io"
 	"math"
-	"os"
-	"os/exec"
-	"path/filepath"
-
-	"github.com/go-audio/audio"
-	"github.com/go-audio/wav"
+	"math/rand/v2"
 )
 
 // Constants for waveform types
@@ -143,81 +138,6 @@ func Limiter(samples []float64) []float64 {
 		}
 	}
 	return limited
-}
-
-// SaveToWav saves the waveform to a .wav file using int16 PCM format.
-func SaveToWav(filename string, samples []float64, sampleRate int) error {
-	if len(samples) == 0 {
-		return fmt.Errorf("cannot save empty waveform: no samples provided")
-	}
-
-	outFile, err := os.Create(filename)
-	if err != nil {
-		return fmt.Errorf("error creating wav file: %v", err)
-	}
-	defer outFile.Close()
-
-	// Create a new WAV encoder for int16 PCM
-	enc := wav.NewEncoder(outFile, sampleRate, 16, 1, 1) // 16-bit, mono channel
-
-	// Create an IntBuffer to store the int16 PCM data
-	buf := &audio.IntBuffer{
-		Format: &audio.Format{SampleRate: sampleRate, NumChannels: 1},
-		Data:   make([]int, len(samples)), // Store int16 samples as int
-	}
-
-	// Convert from float64 to int16
-	for i, sample := range samples {
-		scaled := sample * float64(math.MaxInt16)                                                     // Scale to int16 range
-		buf.Data[i] = int(math.Max(math.Min(scaled, float64(math.MaxInt16)), float64(math.MinInt16))) // Clamp to int16
-	}
-
-	// Write the IntBuffer to the WAV file
-	if err := enc.Write(buf); err != nil {
-		return fmt.Errorf("error writing wav file: %v", err)
-	}
-
-	return enc.Close()
-}
-
-// LoadWav loads a WAV file and converts mono to stereo if the "monoToStereo" flag is true.
-// It returns the samples as []float64 and the sample rate.
-func LoadWav(filename string, monoToStereo bool) ([]float64, int, error) {
-	f, err := os.Open(filename)
-	if err != nil {
-		return nil, 0, fmt.Errorf("error opening wav file: %v", err)
-	}
-	defer f.Close()
-
-	decoder := wav.NewDecoder(f)
-	buffer, err := decoder.FullPCMBuffer()
-	if err != nil {
-		return nil, 0, fmt.Errorf("error decoding wav file: %v", err)
-	}
-
-	intBuffer := buffer.Data
-	numSamples := len(intBuffer)
-	sampleRate := buffer.Format.SampleRate
-	numChannels := buffer.Format.NumChannels
-
-	// If mono and monoToStereo is true, duplicate samples to stereo
-	if numChannels == 1 && monoToStereo {
-		stereoSamples := make([]float64, numSamples*2)
-		for i := 0; i < numSamples; i++ {
-			monoSample := float64(intBuffer[i]) / math.MaxInt16
-			stereoSamples[2*i] = monoSample   // Left channel
-			stereoSamples[2*i+1] = monoSample // Right channel
-		}
-		return stereoSamples, sampleRate, nil
-	}
-
-	// If stereo or if monoToStereo is false, convert to []float64 directly
-	samples := make([]float64, numSamples)
-	for i := 0; i < numSamples; i++ {
-		samples[i] = float64(intBuffer[i]) / math.MaxInt16
-	}
-
-	return samples, sampleRate, nil
 }
 
 // GenerateKick generates the kick drum sound based on the settings
@@ -442,22 +362,6 @@ func FindPeakAmplitude(samples []float64) float64 {
 	return maxAmplitude
 }
 
-// PlayWav plays a WAV file using mpv or ffmpeg
-func PlayWav(filePath string) error {
-	cmd := exec.Command("mpv", filePath)
-	err := cmd.Start()
-	if err != nil {
-		// Fallback to ffmpeg if mpv is not available
-		cmd = exec.Command("ffmpeg", "-i", filePath, "-f", "null", "-")
-		err = cmd.Start()
-		if err != nil {
-			return fmt.Errorf("error playing sound with both mpv and ffmpeg: %v", err)
-		}
-	}
-	cmd.Wait()
-	return nil
-}
-
 // PadSamples pads the shorter waveform with zeros to make both waveforms the same length.
 func PadSamples(wave1, wave2 []float64) ([]float64, []float64) {
 	length1 := len(wave1)
@@ -517,61 +421,6 @@ func (cfg *Settings) GenerateKickWaveform() ([]float64, error) {
 	return samples, nil
 }
 
-// Play plays the generated kick sound by writing it to a temporary WAV file and playing it with an external player
-func (cfg *Settings) Play() error {
-	// Generate the kick waveform in memory
-	samples, err := cfg.GenerateKickWaveform()
-	if err != nil {
-		return err
-	}
-
-	// Save the waveform to a temporary WAV file
-	tmpFile, err := os.CreateTemp("", "kick_*.wav")
-	if err != nil {
-		return fmt.Errorf("error creating temporary file: %v", err)
-	}
-	defer os.Remove(tmpFile.Name())
-
-	err = SaveToWav(tmpFile.Name(), samples, cfg.SampleRate)
-	if err != nil {
-		return err
-	}
-
-	// Play the generated WAV file using an external player (mpv or ffmpeg)
-	return PlayWav(tmpFile.Name())
-}
-
-// SaveTo saves the generated kick to a specified directory, avoiding filename collisions.
-func (cfg *Settings) SaveTo(directory string) (string, error) {
-	n := 1
-	var fileName string
-	for {
-		// Construct the file path with an incrementing number
-		fileName = filepath.Join(directory, fmt.Sprintf("kick%d.wav", n))
-		if _, err := os.Stat(fileName); os.IsNotExist(err) {
-			break
-		}
-		n++
-	}
-
-	// Create the new file
-	file, err := os.Create(fileName)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-
-	// Set the file as the output for the kick generation
-	cfg.Output = file
-
-	// Generate the kick and write to the file
-	if err := cfg.GenerateKick(); err != nil {
-		return "", err
-	}
-
-	return fileName, nil
-}
-
 // Color returns a color that very approximately represents the current kick config
 func (cfg *Settings) Color() color.RGBA {
 	hasher := sha1.New()
@@ -582,4 +431,130 @@ func (cfg *Settings) Color() color.RGBA {
 	g := hashBytes[1]
 	b := hashBytes[2]
 	return color.RGBA{R: r, G: g, B: b, A: 255}
+}
+
+// HighPassFilter applies a basic high-pass filter to the samples
+func HighPassFilter(samples []float64, cutoff float64, sampleRate int) []float64 {
+	filtered := make([]float64, len(samples))
+	rc := 1.0 / (2.0 * math.Pi * cutoff)
+	dt := 1.0 / float64(sampleRate)
+	alpha := rc / (rc + dt)
+
+	filtered[0] = samples[0] // The first sample remains the same
+
+	for i := 1; i < len(samples); i++ {
+		filtered[i] = alpha * (filtered[i-1] + samples[i] - samples[i-1])
+	}
+	return filtered
+}
+
+// BandPassFilter applies a band-pass filter to the samples
+func BandPassFilter(samples []float64, lowCutoff, highCutoff float64, sampleRate int) []float64 {
+	lowPassed := LowPassFilter(samples, highCutoff, sampleRate)
+	return HighPassFilter(lowPassed, lowCutoff, sampleRate)
+}
+
+// SchroederReverb applies a high-quality reverb effect using the Schroeder algorithm
+func SchroederReverb(samples []float64, sampleRate int, decayFactor float64, combDelays []int, allPassDelays []int) []float64 {
+	if len(combDelays) != 4 || len(allPassDelays) != 2 {
+		panic("SchroederReverb expects 4 comb delays and 2 all-pass delays")
+	}
+
+	// Create buffers for the comb filters
+	combBuffers := make([][]float64, 4)
+	for i := range combBuffers {
+		combBuffers[i] = make([]float64, combDelays[i])
+	}
+
+	// Apply comb filters
+	combFiltered := make([]float64, len(samples))
+	for i := range samples {
+		for j := range combBuffers {
+			delayIndex := i % combDelays[j]
+			combBuffers[j][delayIndex] = samples[i] + combBuffers[j][delayIndex]*decayFactor
+			combFiltered[i] += combBuffers[j][delayIndex]
+		}
+		combFiltered[i] /= 4 // Average the comb outputs
+	}
+
+	// Create buffers for the all-pass filters
+	allPassBuffers := make([][]float64, 2)
+	for i := range allPassBuffers {
+		allPassBuffers[i] = make([]float64, allPassDelays[i])
+	}
+
+	// Apply all-pass filters
+	reverbOutput := make([]float64, len(combFiltered))
+	for i := range combFiltered {
+		for j := range allPassBuffers {
+			delayIndex := i % allPassDelays[j]
+			buf := allPassBuffers[j][delayIndex]
+			allPassBuffers[j][delayIndex] = combFiltered[i] + buf*decayFactor
+			reverbOutput[i] = allPassBuffers[j][delayIndex] - buf
+		}
+	}
+
+	return reverbOutput
+}
+
+// ApplyPitchModulation applies low-frequency oscillation (LFO) to modulate the pitch of the waveform
+func ApplyPitchModulation(samples []float64, modFreq, modDepth float64, sampleRate int) []float64 {
+	modulated := make([]float64, len(samples))
+	for i := 0; i < len(samples); i++ {
+		t := float64(i) / float64(sampleRate)
+		mod := math.Sin(2*math.Pi*modFreq*t) * modDepth
+		modulated[i] = samples[i] * math.Pow(2, mod)
+	}
+	return modulated
+}
+
+// ApplyPanning applies stereo panning to the samples. pan should be in the range [-1, 1], where -1 is full left and 1 is full right.
+func ApplyPanning(samples []float64, pan float64) ([]float64, []float64) {
+	leftChannel := make([]float64, len(samples))
+	rightChannel := make([]float64, len(samples))
+	leftGain := (1 - pan) / 2
+	rightGain := (1 + pan) / 2
+
+	for i := range samples {
+		leftChannel[i] = samples[i] * leftGain
+		rightChannel[i] = samples[i] * rightGain
+	}
+
+	return leftChannel, rightChannel
+}
+
+// GenerateNoise generates noise based on the selected noise type
+func GenerateNoise(noiseType int, length int, amount float64) []float64 {
+	noise := make([]float64, length)
+	switch noiseType {
+	case NoiseWhite:
+		for i := range noise {
+			noise[i] = (rand.Float64()*2 - 1) * amount
+		}
+	case NoisePink:
+		// Simple pink noise generation (more complex implementations exist)
+		for i := range noise {
+			noise[i] = (rand.Float64()*2 - 1) * amount * math.Pow(1/float64(i+1), 0.5)
+		}
+	case NoiseBrown:
+		// Brownian noise generation
+		prev := 0.0
+		for i := range noise {
+			change := (rand.Float64()*2 - 1) * amount / 10
+			noise[i] = prev + change
+			prev = noise[i]
+		}
+	}
+	return noise
+}
+
+// ApplyFrequencyModulation applies frequency modulation to a waveform using a modulator frequency and depth
+func ApplyFrequencyModulation(samples []float64, modFreq, modDepth float64, sampleRate int) []float64 {
+	modulated := make([]float64, len(samples))
+	for i := range samples {
+		t := float64(i) / float64(sampleRate)
+		modulator := math.Sin(2*math.Pi*modFreq*t) * modDepth
+		modulated[i] = math.Sin(2*math.Pi*t*modulator) * samples[i]
+	}
+	return modulated
 }

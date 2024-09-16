@@ -90,7 +90,7 @@ github.com/pkg/browser
 # github.com/sahilm/fuzzy v0.1.1
 ## explicit
 github.com/sahilm/fuzzy
-# github.com/xyproto/synth v1.0.0
+# github.com/xyproto/synth v1.1.0
 ## explicit; go 1.23.1
 github.com/xyproto/synth
 # golang.design/x/hotkey v0.4.1
