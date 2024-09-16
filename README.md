@@ -1,4 +1,4 @@
-# kickmutator
+# kickpad
 
 Generate and mutate kick drum sounds.
 
