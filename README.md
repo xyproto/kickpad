@@ -1,6 +1,6 @@
 # kickpad
 
-Generate and mutate kick drum sounds.
+Generate, tweak and evolve kick drum sounds and audio samples.
 
 Note that this is a work in progress and a bit experimental and that saving samples currently does not work, and that playing samples requires mpv or ffmpeg to be installed.
 
