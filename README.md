@@ -1,6 +1,6 @@
 # Kickpad
 
-Kick drum audio sample generator.
+Kick drum audio sample generator. Note that this entire program is a bit experimental.
 
 ## Features and limitations
 
