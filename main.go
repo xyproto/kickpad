@@ -13,10 +13,14 @@ import (
 )
 
 const (
+	versionString = "Kickpad 0.0.1"
+
 	buttonSize     = 100
 	numPads        = 16
 	maxGenerations = 1000
 	maxStagnation  = 50 // Stop after 50 generations with no fitness improvement
+	sampleRate     = 44100
+	bitDepth       = 16
 )
 
 var (
@@ -27,12 +31,7 @@ var (
 	wavFilePath     string    = "kick808.wav" // Default .wav file path
 	statusMessage   string                    // Status message displayed at the bottom
 	cancelTraining  chan bool                 // Channel to cancel GA training
-	sdl2            *synth.SDL2
 )
-
-func init() {
-	sdl2 = synth.NewSDL2()
-}
 
 // Dropdown selection index for the waveform
 var waveformSelectedIndex int32
@@ -79,10 +78,7 @@ func playWavFile() error {
 
 	filePath := filepath.Join(workingDir, wavFilePath)
 
-	err = synth.FFPlayWav(filePath)
-	//err = sdl2.PlayWav(filePath)
-
-	if err != nil {
+	if err := synth.FFPlayWav(filePath); err != nil {
 		statusMessage = fmt.Sprintf("Error: Failed to play .wav file %s", filePath)
 		return err
 	}
@@ -109,7 +105,7 @@ func compareWaveforms(waveform1, waveform2 []float64) float64 {
 // Randomize all pads (instead of mutating)
 func randomizeAllPads() {
 	for i := 0; i < numPads; i++ {
-		pads[i] = synth.NewRandom(nil)
+		pads[i] = synth.NewRandom(nil, sampleRate, bitDepth)
 	}
 }
 
@@ -126,7 +122,7 @@ func optimizeSettings() {
 
 	population := make([]*synth.Settings, 100)
 	for i := 0; i < len(population); i++ {
-		population[i] = synth.NewRandom(nil)
+		population[i] = synth.NewRandom(nil, sampleRate, bitDepth)
 	}
 
 	bestSettings := pads[activePadIndex]
@@ -228,7 +224,7 @@ func createPadWidget(cfg *synth.Settings, padLabel string, padIndex int) g.Widge
 				activePadIndex = padIndex
 				// Then generate and play the sample (even during training)
 				go func() {
-					err := sdl2.PlayKick(pads[activePadIndex])
+					err := synth.FFPlayKick(pads[activePadIndex])
 					if err != nil {
 						statusMessage = fmt.Sprintf("Error: Failed to play kick: %v", err)
 					}
@@ -318,7 +314,7 @@ func createSlidersForSelectedPad() g.Widget {
 			// Buttons under the sliders: Play, Randomize all, Save
 			g.Button("Play").OnClick(func() {
 				statusMessage = ""
-				err := sdl2.PlayKick(pads[activePadIndex])
+				err := synth.FFPlayKick(pads[activePadIndex])
 				if err != nil {
 					statusMessage = "Error: Failed to play kick."
 				}
@@ -425,17 +421,15 @@ func generateTrainingButtons() g.Widget {
 }
 
 func main() {
-	defer sdl2.Close()
-
 	// Initialize random settings for the 16 pads using synth.NewRandom()
 	for i := 0; i < numPads; i++ {
-		pads[i] = synth.NewRandom(nil)
+		pads[i] = synth.NewRandom(nil, sampleRate, bitDepth)
 	}
 
 	// Set the first pad as selected
 	activePadIndex = 0
 
 	// Adjust the window size to fit the grid, buttons, and sliders better
-	wnd := g.NewMasterWindow("Kick Drum Generator", 780, 660, g.MasterWindowFlagsNotResizable)
+	wnd := g.NewMasterWindow(versionString, 780, 660, g.MasterWindowFlagsNotResizable)
 	wnd.Run(loop)
 }
