@@ -5,7 +5,6 @@ import (
 	"math"
 	"math/rand"
 	"os"
-	"os/exec"
 	"path/filepath"
 
 	g "github.com/AllenDang/giu"
@@ -28,7 +27,12 @@ var (
 	wavFilePath     string    = "kick808.wav" // Default .wav file path
 	statusMessage   string                    // Status message displayed at the bottom
 	cancelTraining  chan bool                 // Channel to cancel GA training
+	sdl2            *synth.SDL2
 )
+
+func init() {
+	sdl2 = synth.NewSDL2()
+}
 
 // Dropdown selection index for the waveform
 var waveformSelectedIndex int32
@@ -74,8 +78,10 @@ func playWavFile() error {
 	}
 
 	filePath := filepath.Join(workingDir, wavFilePath)
-	cmd := exec.Command("mpv", filePath)
-	err = cmd.Start()
+
+	err = synth.FFPlayWav(filePath)
+	//err = sdl2.PlayWav(filePath)
+
 	if err != nil {
 		statusMessage = fmt.Sprintf("Error: Failed to play .wav file %s", filePath)
 		return err
@@ -103,7 +109,7 @@ func compareWaveforms(waveform1, waveform2 []float64) float64 {
 // Randomize all pads (instead of mutating)
 func randomizeAllPads() {
 	for i := 0; i < numPads; i++ {
-		pads[i] = synth.NewRandom()
+		pads[i] = synth.NewRandom(nil)
 	}
 }
 
@@ -120,7 +126,7 @@ func optimizeSettings() {
 
 	population := make([]*synth.Settings, 100)
 	for i := 0; i < len(population); i++ {
-		population[i] = synth.NewRandom()
+		population[i] = synth.NewRandom(nil)
 	}
 
 	bestSettings := pads[activePadIndex]
@@ -222,9 +228,9 @@ func createPadWidget(cfg *synth.Settings, padLabel string, padIndex int) g.Widge
 				activePadIndex = padIndex
 				// Then generate and play the sample (even during training)
 				go func() {
-					err := pads[activePadIndex].Play()
+					err := sdl2.PlayKick(pads[activePadIndex])
 					if err != nil {
-						statusMessage = "Error: Failed to play kick."
+						statusMessage = fmt.Sprintf("Error: Failed to play kick: %v", err)
 					}
 				}()
 			}),
@@ -236,7 +242,7 @@ func createPadWidget(cfg *synth.Settings, padLabel string, padIndex int) g.Widge
 			}),
 			// Save button: Save the current pad's configuration as a .wav file
 			g.Button("Save").OnClick(func() {
-				fileName, err := pads[padIndex].SaveTo(".") // Save the active pad's settings to a .wav file
+				fileName, err := pads[padIndex].SaveKickTo(".") // Save the active pad's settings to a .wav file
 				if err != nil {
 					statusMessage = fmt.Sprintf("Error: Failed to save kick to %s", ".")
 				} else {
@@ -312,7 +318,7 @@ func createSlidersForSelectedPad() g.Widget {
 			// Buttons under the sliders: Play, Randomize all, Save
 			g.Button("Play").OnClick(func() {
 				statusMessage = ""
-				err := pads[activePadIndex].Play() // Allow playing while training
+				err := sdl2.PlayKick(pads[activePadIndex])
 				if err != nil {
 					statusMessage = "Error: Failed to play kick."
 				}
@@ -323,7 +329,7 @@ func createSlidersForSelectedPad() g.Widget {
 				g.Update()         // Refresh the UI with randomized settings
 			}),
 			g.Button("Save").OnClick(func() {
-				fileName, err := pads[activePadIndex].SaveTo(".")
+				fileName, err := pads[activePadIndex].SaveKickTo(".")
 				if err != nil {
 					statusMessage = fmt.Sprintf("Error: Failed to save kick to %s", fileName)
 				} else {
@@ -419,9 +425,11 @@ func generateTrainingButtons() g.Widget {
 }
 
 func main() {
+	defer sdl2.Close()
+
 	// Initialize random settings for the 16 pads using synth.NewRandom()
 	for i := 0; i < numPads; i++ {
-		pads[i] = synth.NewRandom()
+		pads[i] = synth.NewRandom(nil)
 	}
 
 	// Set the first pad as selected

@@ -95,7 +95,7 @@ github.com/sahilm/fuzzy
 github.com/veandco/go-sdl2/_libs
 github.com/veandco/go-sdl2/mix
 github.com/veandco/go-sdl2/sdl
-# github.com/xyproto/synth v1.3.0
+# github.com/xyproto/synth v1.4.0
 ## explicit; go 1.23.1
 github.com/xyproto/synth
 # golang.design/x/hotkey v0.4.1

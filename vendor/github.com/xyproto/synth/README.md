@@ -5,4 +5,4 @@ Generate audio samples.
 This is experimental and a work in progress!
 
 * License: MIT
-* Verison: 1.3.0
+* Verison: 1.4.0
