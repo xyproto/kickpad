@@ -159,6 +159,8 @@ func optimizeSettings() {
 				bestFitness = fitness
 				bestSettings = synth.CopySettings(individual)
 				pads[activePadIndex] = bestSettings // Save the best result to the active pad
+				pads[activePadIndex].SampleRate = sampleRate
+				pads[activePadIndex].BitDepth = bitDepth
 				improved = true
 
 				if bestFitness < 1e-3 {
@@ -241,6 +243,8 @@ func createPadWidget(cfg *synth.Settings, padLabel string, padIndex int) g.Widge
 			}),
 			// Save button: Save the current pad's configuration as a .wav file
 			g.Button("Save").OnClick(func() {
+				pads[padIndex].SampleRate = sampleRate
+				pads[padIndex].BitDepth = bitDepth
 				fileName, err := pads[padIndex].SaveKickTo(".") // Save the active pad's settings to a .wav file
 				if err != nil {
 					statusMessage = fmt.Sprintf("Error: Failed to save kick to %s", ".")
@@ -323,7 +327,7 @@ func createSlidersForSelectedPad() g.Widget {
 		),
 		g.Row(
 			g.Label("Bit Depth"),
-			g.Checkbox("24-bit", &bitDepthSelected).OnChange(func() {
+			g.Checkbox("24-bit instead of 16-bit", &bitDepthSelected).OnChange(func() {
 				if bitDepthSelected {
 					bitDepth = 24
 				} else {
@@ -346,6 +350,8 @@ func createSlidersForSelectedPad() g.Widget {
 				g.Update()         // Refresh the UI with randomized settings
 			}),
 			g.Button("Save").OnClick(func() {
+				pads[activePadIndex].SampleRate = sampleRate
+				pads[activePadIndex].BitDepth = bitDepth
 				fileName, err := pads[activePadIndex].SaveKickTo(".")
 				if err != nil {
 					statusMessage = fmt.Sprintf("Error: Failed to save kick to %s", fileName)
