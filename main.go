@@ -32,12 +32,12 @@ var (
 	sampleRates               = []int{44100, 48000, 96000, 192000}
 	bitDepth        int       = defaultBitDepth
 	sampleRate      int       = sampleRates[0]
-)
 
-// Dropdown selection index for the waveform
-var waveformSelectedIndex int32
-var sampleRateIndex int32
-var bitDepthSelected bool
+	// Dropdown selection index for the waveform
+	waveformSelectedIndex int32
+	sampleRateIndex       int32
+	bitDepthSelected      bool
+)
 
 // Load a .wav file and store the waveform for comparison
 func loadWavFile() error {
@@ -126,6 +126,8 @@ func optimizeSettings() {
 	population := make([]*synth.Settings, 100)
 	for i := 0; i < len(population); i++ {
 		population[i] = synth.NewRandom(nil, sampleRate, bitDepth)
+		// Start out with a randomized selection of only some oscillators
+		population[i].WaveformType = rand.Intn(4) // Mutate to Sine, Triangle, Sawtooth or Square wave
 	}
 
 	bestSettings := pads[activePadIndex]
@@ -211,7 +213,7 @@ func mutateSettings(cfg *synth.Settings) {
 
 	// Mutate the waveform and noise amounts
 	if rand.Float64() < mutationFactor {
-		cfg.WaveformType = rand.Intn(7) // Mutate to any waveform type
+		cfg.WaveformType = rand.Intn(4) // Mutate to Sine, Triangle, Sawtooth or Square wave
 	}
 	if rand.Float64() < mutationFactor {
 		cfg.NoiseAmount *= (0.8 + rand.Float64()*0.4)
