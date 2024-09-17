@@ -36,13 +36,19 @@ Kick drum audio sample generator. Note that this entire program is a bit experim
 
 ### Arch Linux
 
-Using pacman, go and bash:
+#### Quick Version
+
+    go install github.com/xyproto/kickpad@latest
+
+#### Extended Version
+
+Install the required dependencies, download the sources, build the executable and add ~/go/bin to $PATH in bash:
 
     sudo pacman -S go sdl2 glfw sdl2_mixer ffmpeg
     go install github.com/xyproto/kickpad@latest
     echo 'export PATH="$HOME/go/bin:$PATH"' >> ~/.bashrc
 
-Then exec bash to get the updated PATH:
+Then `exec` bash to get the updated PATH:
 
     exec $SHELL
 
@@ -50,7 +56,13 @@ Then just run:
 
     kickpad
 
-### macOS (easy instructions), which will play the currently loaded W
+### macOS
+
+#### Quick Version
+
+    go install github.com/xyproto/kickpad@latest
+
+#### Extended Version
 
 Open a terminal:
 
