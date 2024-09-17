@@ -5,7 +5,7 @@ go 1.23.1
 require (
 	github.com/AllenDang/giu v0.8.1
 	github.com/go-audio/wav v1.1.0
-	github.com/xyproto/synth v1.4.0
+	github.com/xyproto/synth v1.4.3
 )
 
 require (

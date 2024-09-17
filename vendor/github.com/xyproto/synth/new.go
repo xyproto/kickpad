@@ -40,8 +40,8 @@ func NewSettings(startFreq, endFreq float64, sampleRate int, duration float64, b
 }
 
 // NewRandom generates random kick drum settings
-func NewRandom(output io.WriteSeeker) *Settings {
-	cfg, _ := NewSettings(55.0, 30.0, 96000, 1.0, 16, output)
+func NewRandom(output io.WriteSeeker, sampleRate, bitDepth int) *Settings {
+	cfg, _ := NewSettings(55.0, 30.0, sampleRate, 1.0, bitDepth, output)
 	cfg.Attack = rand.Float64() * 0.02
 	cfg.Decay = 0.2 + rand.Float64()*0.8
 	cfg.Sustain = rand.Float64() * 0.5

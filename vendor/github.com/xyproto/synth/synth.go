@@ -16,6 +16,9 @@ const (
 	WaveTriangle
 	WaveSawtooth
 	WaveSquare
+	WaveWhiteNoise
+	WavePinkNoise
+	WaveBrownNoise
 )
 
 // Constants for noise types
@@ -73,7 +76,7 @@ func DetunedOscillators(freq float64, detune []float64, length int, sampleRate i
 	for _, d := range detune {
 		osc := SawtoothOscillator(freq*(1+d), length, sampleRate)
 		for i := range combined {
-			combined[i] += osc[i] / float64(numOsc) // Average to avoid high amplitudes
+			combined[i] += osc[i] / float64(numOsc)
 		}
 	}
 	return combined
@@ -108,6 +111,10 @@ func LowPassFilter(samples []float64, cutoff float64, sampleRate int) []float64 
 	rc := 1.0 / (2.0 * math.Pi * cutoff)
 	dt := 1.0 / float64(sampleRate)
 	alpha := dt / (rc + dt)
+
+	if len(samples) == 0 {
+		return samples
+	}
 
 	prev := samples[0]       // Initialize with the first sample
 	filtered[0] = samples[0] // The first sample remains the same
@@ -168,6 +175,12 @@ func (cfg *Settings) GenerateKick() error {
 			sample = 2 * (t*frequency - math.Floor(0.5+t*frequency))
 		case WaveSquare:
 			sample = math.Copysign(1.0, math.Sin(2*math.Pi*frequency*t))
+		case WaveWhiteNoise:
+			sample = (rand.Float64()*2 - 1) * cfg.NoiseAmount
+		case WavePinkNoise:
+			sample = GenerateNoise(NoisePink, 1, cfg.NoiseAmount)[0]
+		case WaveBrownNoise:
+			sample = GenerateNoise(NoiseBrown, 1, cfg.NoiseAmount)[0]
 		default:
 			return fmt.Errorf("unsupported waveform type: %d", cfg.WaveformType)
 		}
@@ -349,7 +362,7 @@ func AnalyzeHighestFrequency(samples []float64, sampleRate int) float64 {
 func NormalizeSamples(samples []float64, targetPeak float64) []float64 {
 	currentPeak := FindPeakAmplitude(samples)
 	if currentPeak == 0 {
-		return samples // Avoid division by zero
+		return samples
 	}
 	scale := targetPeak / currentPeak
 	normalizedSamples := make([]float64, len(samples))
@@ -425,6 +438,12 @@ func (cfg *Settings) GenerateKickWaveform() ([]float64, error) {
 			sample = 2 * (t*frequency - math.Floor(0.5+t*frequency))
 		case WaveSquare:
 			sample = math.Copysign(1.0, math.Sin(2*math.Pi*frequency*t))
+		case WaveWhiteNoise:
+			sample = (rand.Float64()*2 - 1) * cfg.NoiseAmount
+		case WavePinkNoise:
+			sample = GenerateNoise(NoisePink, 1, cfg.NoiseAmount)[0]
+		case WaveBrownNoise:
+			sample = GenerateNoise(NoiseBrown, 1, cfg.NoiseAmount)[0]
 		default:
 			return nil, fmt.Errorf("unsupported waveform type: %d", cfg.WaveformType)
 		}
@@ -461,7 +480,11 @@ func HighPassFilter(samples []float64, cutoff float64, sampleRate int) []float64
 	dt := 1.0 / float64(sampleRate)
 	alpha := rc / (rc + dt)
 
-	filtered[0] = samples[0] // The first sample remains the same
+	if len(samples) == 0 {
+		return samples
+	}
+
+	filtered[0] = samples[0]
 
 	for i := 1; i < len(samples); i++ {
 		filtered[i] = alpha * (filtered[i-1] + samples[i] - samples[i-1])
@@ -668,6 +691,12 @@ func (cfg *Settings) GenerateSweepWaveform() ([]float64, error) {
 			sample = 2 * (t*frequency - math.Floor(0.5+t*frequency))
 		case WaveSquare:
 			sample = math.Copysign(1.0, math.Sin(2*math.Pi*frequency*t))
+		case WaveWhiteNoise:
+			sample = (rand.Float64()*2 - 1) * cfg.NoiseAmount
+		case WavePinkNoise:
+			sample = GenerateNoise(NoisePink, 1, cfg.NoiseAmount)[0]
+		case WaveBrownNoise:
+			sample = GenerateNoise(NoiseBrown, 1, cfg.NoiseAmount)[0]
 		default:
 			return nil, fmt.Errorf("unsupported waveform type: %d", cfg.WaveformType)
 		}

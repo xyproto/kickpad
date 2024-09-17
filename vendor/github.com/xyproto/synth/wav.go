@@ -91,6 +91,36 @@ func FFPlayWav(filePath string) error {
 	return cmd.Wait()
 }
 
+// FFPlayKick generates a Kick drum waveform, saves it to a temporary WAV file,
+// plays it using ffplay, and then deletes the temporary file.
+func FFPlayKick(cfg *Settings) error {
+	// Generate the kick drum waveform
+	samples, err := cfg.GenerateKickWaveform()
+	if err != nil {
+		return fmt.Errorf("error generating kick waveform: %v", err)
+	}
+
+	// Create a temporary WAV file
+	tmpFile, err := os.CreateTemp("", "kickdrum_*.wav")
+	if err != nil {
+		return fmt.Errorf("error creating temporary wav file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name()) // Ensure the file is removed after playing
+
+	// Save the waveform to the temporary file using SaveToWav
+	if err := SaveToWav(tmpFile, samples, cfg.SampleRate); err != nil {
+		return fmt.Errorf("error saving wav file: %v", err)
+	}
+
+	// Play the temporary wav file using ffplay
+	err = FFPlayWav(tmpFile.Name())
+	if err != nil {
+		return fmt.Errorf("error playing wav file: %v", err)
+	}
+
+	return nil
+}
+
 // SaveKickTo generates kick samples and saves it to a specified directory, avoiding filename collisions.
 func (cfg *Settings) SaveKickTo(directory string) (string, error) {
 	n := 1
