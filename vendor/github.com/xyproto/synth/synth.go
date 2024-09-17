@@ -203,7 +203,7 @@ func (cfg *Settings) GenerateKick() error {
 
 	// Write to output
 	if cfg.Output != nil {
-		return SaveToWav(cfg.Output, samples, cfg.SampleRate)
+		return SaveToWav(cfg.Output, samples, cfg.SampleRate, cfg.BitDepth)
 	}
 
 	// If no output is specified, return an error

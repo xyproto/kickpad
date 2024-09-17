@@ -12,25 +12,36 @@ import (
 	"github.com/go-audio/wav"
 )
 
-// SaveToWav saves the waveform to a .wav file using int16 PCM format.
-func SaveToWav(w io.WriteSeeker, samples []float64, sampleRate int) error {
+// SaveToWav saves the waveform to a .wav file using the PCM format with the given bit depth.
+func SaveToWav(w io.WriteSeeker, samples []float64, sampleRate, bitDepth int) error {
 	if len(samples) == 0 {
 		return fmt.Errorf("cannot save empty waveform: no samples provided")
 	}
 
-	// Create a new WAV encoder for int16 PCM
-	enc := wav.NewEncoder(w, sampleRate, 16, 1, 1) // 16-bit, mono channel
+	// Create a new WAV encoder for intN PCM
+	enc := wav.NewEncoder(w, sampleRate, bitDepth, 1, 1) // Mono channel
 
-	// Create an IntBuffer to store the int16 PCM data
+	// Create a buffer to store the PCM data
 	buf := &audio.IntBuffer{
 		Format: &audio.Format{SampleRate: sampleRate, NumChannels: 1},
-		Data:   make([]int, len(samples)), // Store int16 samples as int
+		Data:   make([]int, len(samples)),
 	}
 
-	// Convert from float64 to int16
-	for i, sample := range samples {
-		scaled := sample * float64(math.MaxInt16)                                                     // Scale to int16 range
-		buf.Data[i] = int(math.Max(math.Min(scaled, float64(math.MaxInt16)), float64(math.MinInt16))) // Clamp to int16
+	switch bitDepth {
+	case 16:
+		// Convert from float64 to int16 for 16-bit WAV files
+		for i, sample := range samples {
+			scaled := sample * float64(math.MaxInt16) // Scale to int16 range
+			buf.Data[i] = int(math.Max(math.Min(scaled, float64(math.MaxInt16)), float64(math.MinInt16)))
+		}
+	case 24:
+		// Convert from float64 to int24 for 24-bit WAV files
+		for i, sample := range samples {
+			scaled := sample * float64(1<<23) // Scale to 24-bit range (-8388608 to 8388607)
+			buf.Data[i] = int(math.Max(math.Min(scaled, float64(8388607)), float64(-8388608)))
+		}
+	default:
+		return fmt.Errorf("unsupported bit depth: %d", bitDepth)
 	}
 
 	// Write the IntBuffer to the WAV file
@@ -108,7 +119,7 @@ func FFPlayKick(cfg *Settings) error {
 	defer os.Remove(tmpFile.Name()) // Ensure the file is removed after playing
 
 	// Save the waveform to the temporary file using SaveToWav
-	if err := SaveToWav(tmpFile, samples, cfg.SampleRate); err != nil {
+	if err := SaveToWav(tmpFile, samples, cfg.SampleRate, cfg.BitDepth); err != nil {
 		return fmt.Errorf("error saving wav file: %v", err)
 	}
 
