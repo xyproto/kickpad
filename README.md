@@ -1,10 +1,31 @@
-# kickpad
+# Kickpad
 
 Generate, tweak and evolve kick drum sounds and audio samples.
 
-Note that this is a work in progress and a bit experimental and that saving samples currently does not work, and that playing samples requires mpv or ffmpeg to be installed.
+## Requirements
+
+### Run-time
+
+* `ffplay`
+
+### Build-time
+
+* `go` (1.23 or later)
+
+## Screenshot
 
 ![screenshot](img/screenshot.png)
 
+## Installation
+
+    go install github.com/xyproto/kickpad@latest
+
+## Running
+
+    kickpad
+
+## General info
+
 * Version: 0.0.1
+* Author: Alexander F. Rødseth &lt;xyproto@archlinux.org&gt;
 * License: MIT
