@@ -37,7 +37,47 @@ Kick drum audio sample generator. Note that this entire program is a bit experim
 
 ## Installation
 
+### Arch Linux
+
+Using pacman, go and bash:
+
+    sudo pacman -S go sdl2 glfw sdl2_mixer ffmpeg
     go install github.com/xyproto/kickpad@latest
+    echo 'export PATH="$HOME/go/bin:$PATH"' >> ~/.bashrc
+
+Then exec bash to get the updated PATH:
+
+    exec $SHELL
+
+Then just run:
+
+    kickpad
+
+### macOS (easy instructions), which will play the currently loaded W
+
+Open a terminal:
+
+* Press `Cmd + Space` to open Spotlight.
+* Type in "Terminal" and press `Return`.
+
+Install Homebrew:
+
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+Install the required dependencies:
+
+    brew install ffmpeg sdl2 sdl2_mixer go glfw
+
+Install Kickpad:
+
+    go install github.com/xyproto/kickpad@latest
+    sudo install -m755 go/bin/kickpad /usr/local/bin/kickpad
+
+Run Kickpad:
+
+    kickpad
+
+When running kickpad the next time, opening a terminal and typing in `kickpad` is enough.    
 
 ## Running
 
