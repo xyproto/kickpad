@@ -7,6 +7,7 @@ Kick drum audio sample generator.
 * Can be used for sound design of kick drum sounds, for trying different waveforms and selecting different parameters.
 * Can be used for loading an existing `.wav` audio sample and then evolve the settings so that they generate a kick drum sound that is as close as possible to the given `.wav`, using GA (genetic algorithms).
 * Can be used for setting up 16 different kick drum sound, which can then be played by clicking the pad buttons.
+* Uses `ffplay` for playing audio samples, for now, since I had issues combining SDL2 mixer package with the `giu` package. This may cause some clicks in the audio of more than one waveform is being played at once.
 
 ## Screenshot
 
