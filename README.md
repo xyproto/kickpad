@@ -27,14 +27,9 @@ Kick drum audio sample generator. Note that this entire program is a bit experim
 
 ## Requirements
 
-### Run-time
-
 * `ffplay`
 * `glfw`
 * `sdl2` + `sdl2_mixer`
-
-### Build-time
-
 * `go` (1.23 or later)
 
 ## Installation
