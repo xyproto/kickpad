@@ -1,7 +1,10 @@
 package synth
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"os/exec"
@@ -9,22 +12,18 @@ import (
 
 	"github.com/go-audio/audio"
 	"github.com/go-audio/wav"
+	"github.com/veandco/go-sdl2/mix"
+	"github.com/veandco/go-sdl2/sdl"
 )
 
 // SaveToWav saves the waveform to a .wav file using int16 PCM format.
-func SaveToWav(filename string, samples []float64, sampleRate int) error {
+func SaveToWav(w io.WriteSeeker, samples []float64, sampleRate int) error {
 	if len(samples) == 0 {
 		return fmt.Errorf("cannot save empty waveform: no samples provided")
 	}
 
-	outFile, err := os.Create(filename)
-	if err != nil {
-		return fmt.Errorf("error creating wav file: %v", err)
-	}
-	defer outFile.Close()
-
 	// Create a new WAV encoder for int16 PCM
-	enc := wav.NewEncoder(outFile, sampleRate, 16, 1, 1) // 16-bit, mono channel
+	enc := wav.NewEncoder(w, sampleRate, 16, 1, 1) // 16-bit, mono channel
 
 	// Create an IntBuffer to store the int16 PCM data
 	buf := &audio.IntBuffer{
@@ -86,48 +85,18 @@ func LoadWav(filename string, monoToStereo bool) ([]float64, int, error) {
 	return samples, sampleRate, nil
 }
 
-// PlayWav plays a WAV file using mpv or ffmpeg
-func PlayWav(filePath string) error {
-	cmd := exec.Command("mpv", filePath)
+// FFPlayWav plays a WAV file using ffplay
+func FFPlayWav(filePath string) error {
+	cmd := exec.Command("ffplay", "-nodisp", "-autoexit", filePath)
 	err := cmd.Start()
 	if err != nil {
-		// Fallback to ffmpeg if mpv is not available
-		cmd = exec.Command("ffmpeg", "-i", filePath, "-f", "null", "-")
-		err = cmd.Start()
-		if err != nil {
-			return fmt.Errorf("error playing sound with both mpv and ffmpeg: %v", err)
-		}
+		return fmt.Errorf("error playing sound with ffplay: %v", err)
 	}
-	cmd.Wait()
-	return nil
+	return cmd.Wait()
 }
 
-// Play plays the generated kick sound by writing it to a temporary WAV file and playing it with an external player
-func (cfg *Settings) Play() error {
-	// Generate the kick waveform in memory
-	samples, err := cfg.GenerateKickWaveform()
-	if err != nil {
-		return err
-	}
-
-	// Save the waveform to a temporary WAV file
-	tmpFile, err := os.CreateTemp("", "kick_*.wav")
-	if err != nil {
-		return fmt.Errorf("error creating temporary file: %v", err)
-	}
-	defer os.Remove(tmpFile.Name())
-
-	err = SaveToWav(tmpFile.Name(), samples, cfg.SampleRate)
-	if err != nil {
-		return err
-	}
-
-	// Play the generated WAV file using an external player (mpv or ffmpeg)
-	return PlayWav(tmpFile.Name())
-}
-
-// SaveTo saves the generated kick to a specified directory, avoiding filename collisions.
-func (cfg *Settings) SaveTo(directory string) (string, error) {
+// SaveKickTo generates kick samples and saves it to a specified directory, avoiding filename collisions.
+func (cfg *Settings) SaveKickTo(directory string) (string, error) {
 	n := 1
 	var fileName string
 	for {
@@ -155,4 +124,104 @@ func (cfg *Settings) SaveTo(directory string) (string, error) {
 	}
 
 	return fileName, nil
+}
+
+// PlayKick generates and plays the current kick drum sound
+func (cfg *Settings) PlayKick() error {
+	samples, err := cfg.GenerateKickWaveform()
+	if err != nil {
+		return err
+	}
+	return PlayWaveform(samples, cfg.SampleRate)
+}
+
+// PlayWav plays a WAV file using SDL2 and SDL_mixer
+func PlayWav(filePath string) error {
+	// Initialize SDL
+	if err := sdl.Init(sdl.INIT_AUDIO); err != nil {
+		return fmt.Errorf("could not initialize SDL: %v", err)
+	}
+	defer sdl.Quit()
+
+	// Open the audio device
+	if err := mix.OpenAudio(44100, sdl.AUDIO_S16SYS, 2, 1024); err != nil {
+		return fmt.Errorf("could not open audio: %v", err)
+	}
+	defer mix.CloseAudio()
+
+	// Load the WAV file
+	music, err := mix.LoadMUS(filePath)
+	if err != nil {
+		return fmt.Errorf("could not load music file: %v", err)
+	}
+	defer music.Free()
+
+	// Play the music
+	if err := music.Play(1); err != nil {
+		return fmt.Errorf("could not play music: %v", err)
+	}
+
+	// Wait until the music is finished playing
+	for mix.PlayingMusic() {
+		sdl.Delay(100)
+	}
+
+	return nil
+}
+
+// PlayWaveform plays raw waveform samples using SDL2
+func PlayWaveform(samples []float64, sampleRate int) error {
+	// Initialize SDL
+	if err := sdl.Init(sdl.INIT_AUDIO); err != nil {
+		return fmt.Errorf("could not initialize SDL: %v", err)
+	}
+	defer sdl.Quit()
+
+	var desired, obtained sdl.AudioSpec
+
+	desired.Freq = int32(sampleRate)
+	desired.Format = sdl.AUDIO_F32SYS // 32-bit float samples
+	desired.Channels = 1              // Mono
+	desired.Samples = 4096            // Buffer size
+
+	// Open the audio device
+	audioDeviceID, err := sdl.OpenAudioDevice("", false, &desired, &obtained, 0)
+	if err != nil {
+		return fmt.Errorf("could not open audio device: %v", err)
+	}
+	defer sdl.CloseAudioDevice(audioDeviceID)
+
+	// Check if obtained spec matches desired spec
+	if obtained.Format != desired.Format || obtained.Channels != desired.Channels || obtained.Freq != desired.Freq {
+		return fmt.Errorf("obtained audio spec does not match desired spec")
+	}
+
+	// Convert samples []float64 to []float32
+	audioData := make([]float32, len(samples))
+	for i, sample := range samples {
+		audioData[i] = float32(sample)
+	}
+
+	// Convert audioData []float32 to []byte
+	buf := new(bytes.Buffer)
+	for _, f := range audioData {
+		if err := binary.Write(buf, binary.LittleEndian, f); err != nil {
+			return fmt.Errorf("error converting float32 to bytes: %v", err)
+		}
+	}
+
+	// Queue the audio data
+	if err := sdl.QueueAudio(audioDeviceID, buf.Bytes()); err != nil {
+		return fmt.Errorf("could not queue audio data: %v", err)
+	}
+
+	// Start playback
+	sdl.PauseAudioDevice(audioDeviceID, false)
+
+	// Wait until the audio finishes playing
+	for sdl.GetQueuedAudioSize(audioDeviceID) > 0 {
+		sdl.Delay(100)
+	}
+
+	return nil
 }

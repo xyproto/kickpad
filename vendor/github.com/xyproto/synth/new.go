@@ -28,7 +28,7 @@ func NewSettings(startFreq, endFreq float64, sampleRate int, duration float64, b
 		PitchDecay:                 0.4,                              // Pitch envelope decay time
 		NoiseType:                  NoiseNone,                        // Default to no noise
 		NoiseAmount:                0.0,                              // Amount of noise to mix in
-		Output:                     output,                           // Output file (WAV)
+		Output:                     output,                           // Output writer
 		NumOscillators:             1,                                // Default to 1 oscillator
 		OscillatorLevels:           []float64{1.0},                   // Default oscillator level
 		SaturatorAmount:            0.3,                              // Saturation amount
@@ -40,8 +40,8 @@ func NewSettings(startFreq, endFreq float64, sampleRate int, duration float64, b
 }
 
 // NewRandom generates random kick drum settings
-func NewRandom() *Settings {
-	cfg, _ := NewSettings(55.0, 30.0, 96000, 1.0, 16, nil)
+func NewRandom(output io.WriteSeeker) *Settings {
+	cfg, _ := NewSettings(55.0, 30.0, 96000, 1.0, 16, output)
 	cfg.Attack = rand.Float64() * 0.02
 	cfg.Decay = 0.2 + rand.Float64()*0.8
 	cfg.Sustain = rand.Float64() * 0.5
@@ -51,11 +51,7 @@ func NewRandom() *Settings {
 	cfg.Sweep = rand.Float64() * 1.5
 	cfg.PitchDecay = rand.Float64() * 1.5
 	cfg.FadeDuration = rand.Float64() * 0.1
-	if rand.Float64() < 0.1 {
-		cfg.SmoothFrequencyTransitions = false
-	} else {
-		cfg.SmoothFrequencyTransitions = true
-	}
+	cfg.SmoothFrequencyTransitions = rand.Float64() >= 0.1
 	if rand.Float64() < 0.1 {
 		cfg.WaveformType = rand.Intn(7)
 	} else {

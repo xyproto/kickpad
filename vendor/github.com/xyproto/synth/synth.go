@@ -7,7 +7,7 @@ import (
 	"image/color"
 	"io"
 	"math"
-	"math/rand/v2"
+	"math/rand"
 )
 
 // Constants for waveform types
@@ -54,11 +54,14 @@ type Settings struct {
 	SmoothFrequencyTransitions bool
 }
 
+// FadeCurve defines a type for fade curve functions
+type FadeCurve func(t float64) float64
+
 // SawtoothOscillator generates a sawtooth waveform at a specific frequency
 func SawtoothOscillator(freq float64, length int, sampleRate int) []float64 {
 	osc := make([]float64, length)
 	for i := range osc {
-		osc[i] = 2 * (float64(i)/float64(sampleRate)*freq - math.Floor(0.5+float64(i)/float64(sampleRate)*freq))
+		osc[i] = 2 * (float64(i)*freq/float64(sampleRate) - math.Floor(0.5+float64(i)*freq/float64(sampleRate)))
 	}
 	return osc
 }
@@ -79,17 +82,22 @@ func DetunedOscillators(freq float64, detune []float64, length int, sampleRate i
 // ApplyEnvelope applies an ADSR envelope to the waveform
 func ApplyEnvelope(samples []float64, attack, decay, sustain, release float64, sampleRate int) []float64 {
 	adsr := make([]float64, len(samples))
+	totalDuration := float64(len(samples)) / float64(sampleRate)
 	for i := range samples {
 		t := float64(i) / float64(sampleRate)
+		var envelope float64
 		if t < attack {
-			adsr[i] = samples[i] * (t / attack)
+			envelope = t / attack
 		} else if t < attack+decay {
-			adsr[i] = samples[i] * (1 - (t-attack)/decay*(1-sustain))
-		} else if t < float64(len(samples))/float64(sampleRate)-release {
-			adsr[i] = samples[i] * sustain
+			envelope = 1 - (t-attack)/decay*(1-sustain)
+		} else if t < totalDuration-release {
+			envelope = sustain
+		} else if t < totalDuration {
+			envelope = sustain * (1 - (t-(totalDuration-release))/release)
 		} else {
-			adsr[i] = samples[i] * (1 - (t-(float64(len(samples))/float64(sampleRate)-release))/release*sustain)
+			envelope = 0
 		}
+		adsr[i] = samples[i] * envelope
 	}
 	return adsr
 }
@@ -155,17 +163,21 @@ func (cfg *Settings) GenerateKick() error {
 		case WaveSine:
 			sample = math.Sin(2 * math.Pi * frequency * t)
 		case WaveTriangle:
-			sample = 2*math.Abs(2*((t*frequency)-math.Floor((t*frequency)+0.5))) - 1
+			sample = 2*math.Abs(2*(t*frequency-math.Floor(t*frequency+0.5))) - 1
 		case WaveSawtooth:
 			sample = 2 * (t*frequency - math.Floor(0.5+t*frequency))
 		case WaveSquare:
 			sample = math.Copysign(1.0, math.Sin(2*math.Pi*frequency*t))
+		default:
+			return fmt.Errorf("unsupported waveform type: %d", cfg.WaveformType)
 		}
 
-		sample *= cfg.OscillatorLevels[0] // Apply the first oscillator level
+		if len(cfg.OscillatorLevels) > 0 {
+			sample *= cfg.OscillatorLevels[0] // Apply the first oscillator level
+		}
 
 		// Apply envelope (ADSR)
-		sample *= cfg.ApplyEnvelope(t)
+		sample *= cfg.ApplyEnvelopeAtTime(t)
 
 		// Apply drive (distortion)
 		sample = cfg.ApplyDrive(sample)
@@ -176,12 +188,17 @@ func (cfg *Settings) GenerateKick() error {
 	// Apply limiter to the samples
 	samples = Limiter(samples)
 
-	// Save the result to a WAV file
-	return SaveToWav("kick.wav", samples, cfg.SampleRate)
+	// Write to output
+	if cfg.Output != nil {
+		return SaveToWav(cfg.Output, samples, cfg.SampleRate)
+	}
+
+	// If no output is specified, return an error
+	return errors.New("no output specified for GenerateKick")
 }
 
-// ApplyEnvelope generates the ADSR envelope at a specific time
-func (cfg *Settings) ApplyEnvelope(t float64) float64 {
+// ApplyEnvelopeAtTime generates the ADSR envelope at a specific time
+func (cfg *Settings) ApplyEnvelopeAtTime(t float64) float64 {
 	attack, decay, sustain, release := cfg.Attack, cfg.Decay, cfg.Sustain, cfg.Release
 	duration := cfg.Duration
 
@@ -320,8 +337,7 @@ func AnalyzeHighestFrequency(samples []float64, sampleRate int) float64 {
 			zeroCrossings++
 		}
 	}
-	//fmt.Printf("Zero Crossings: %d\n", zeroCrossings)
-	duration := float64(l) / float64(sampleRate)
+	duration := float64(l-1) / float64(sampleRate)
 	if duration == 0 {
 		return 0
 	}
@@ -404,15 +420,20 @@ func (cfg *Settings) GenerateKickWaveform() ([]float64, error) {
 		case WaveSine:
 			sample = math.Sin(2 * math.Pi * frequency * t)
 		case WaveTriangle:
-			sample = 2*math.Abs(2*((t*frequency)-math.Floor((t*frequency)+0.5))) - 1
+			sample = 2*math.Abs(2*(t*frequency-math.Floor(t*frequency+0.5))) - 1
 		case WaveSawtooth:
 			sample = 2 * (t*frequency - math.Floor(0.5+t*frequency))
 		case WaveSquare:
 			sample = math.Copysign(1.0, math.Sin(2*math.Pi*frequency*t))
+		default:
+			return nil, fmt.Errorf("unsupported waveform type: %d", cfg.WaveformType)
 		}
 
-		sample *= cfg.OscillatorLevels[0]
-		sample *= cfg.ApplyEnvelope(t)
+		if len(cfg.OscillatorLevels) > 0 {
+			sample *= cfg.OscillatorLevels[0]
+		}
+
+		sample *= cfg.ApplyEnvelopeAtTime(t)
 		sample = cfg.ApplyDrive(sample)
 		samples[i] = sample
 	}
@@ -421,7 +442,7 @@ func (cfg *Settings) GenerateKickWaveform() ([]float64, error) {
 	return samples, nil
 }
 
-// Color returns a color that very approximately represents the current kick config
+// Color returns a color that represents the current kick config
 func (cfg *Settings) Color() color.RGBA {
 	hasher := sha1.New()
 	hasher.Write([]byte(fmt.Sprintf("%d%f%f%f%f%f%f%f%f", cfg.WaveformType, cfg.Attack, cfg.Decay, cfg.Sustain, cfg.Release, cfg.Drive, cfg.FilterCutoff, cfg.Sweep, cfg.PitchDecay)))
@@ -455,9 +476,9 @@ func BandPassFilter(samples []float64, lowCutoff, highCutoff float64, sampleRate
 }
 
 // SchroederReverb applies a high-quality reverb effect using the Schroeder algorithm
-func SchroederReverb(samples []float64, sampleRate int, decayFactor float64, combDelays []int, allPassDelays []int) []float64 {
+func SchroederReverb(samples []float64, sampleRate int, decayFactor float64, combDelays []int, allPassDelays []int) ([]float64, error) {
 	if len(combDelays) != 4 || len(allPassDelays) != 2 {
-		panic("SchroederReverb expects 4 comb delays and 2 all-pass delays")
+		return nil, errors.New("SchroederReverb expects 4 comb delays and 2 all-pass delays")
 	}
 
 	// Create buffers for the comb filters
@@ -474,7 +495,6 @@ func SchroederReverb(samples []float64, sampleRate int, decayFactor float64, com
 			combBuffers[j][delayIndex] = samples[i] + combBuffers[j][delayIndex]*decayFactor
 			combFiltered[i] += combBuffers[j][delayIndex]
 		}
-		combFiltered[i] /= 4 // Average the comb outputs
 	}
 
 	// Create buffers for the all-pass filters
@@ -484,26 +504,36 @@ func SchroederReverb(samples []float64, sampleRate int, decayFactor float64, com
 	}
 
 	// Apply all-pass filters
-	reverbOutput := make([]float64, len(combFiltered))
-	for i := range combFiltered {
-		for j := range allPassBuffers {
-			delayIndex := i % allPassDelays[j]
-			buf := allPassBuffers[j][delayIndex]
-			allPassBuffers[j][delayIndex] = combFiltered[i] + buf*decayFactor
-			reverbOutput[i] = allPassBuffers[j][delayIndex] - buf
+	reverbOutput := combFiltered
+	for j := range allPassBuffers {
+		buffer := allPassBuffers[j]
+		delay := allPassDelays[j]
+		output := make([]float64, len(reverbOutput))
+		for i := range reverbOutput {
+			delayIndex := i % delay
+			bufOut := buffer[delayIndex]
+			buffer[delayIndex] = reverbOutput[i] + bufOut*decayFactor
+			output[i] = buffer[delayIndex] - bufOut
 		}
+		reverbOutput = output
 	}
 
-	return reverbOutput
+	return reverbOutput, nil
 }
 
-// ApplyPitchModulation applies low-frequency oscillation (LFO) to modulate the pitch of the waveform
 func ApplyPitchModulation(samples []float64, modFreq, modDepth float64, sampleRate int) []float64 {
 	modulated := make([]float64, len(samples))
 	for i := 0; i < len(samples); i++ {
 		t := float64(i) / float64(sampleRate)
 		mod := math.Sin(2*math.Pi*modFreq*t) * modDepth
-		modulated[i] = samples[i] * math.Pow(2, mod)
+		value := samples[i] * math.Pow(2, mod)
+		// Clamp the value
+		if value > 1.0 {
+			value = 1.0
+		} else if value < -1.0 {
+			value = -1.0
+		}
+		modulated[i] = value
 	}
 	return modulated
 }
@@ -512,8 +542,8 @@ func ApplyPitchModulation(samples []float64, modFreq, modDepth float64, sampleRa
 func ApplyPanning(samples []float64, pan float64) ([]float64, []float64) {
 	leftChannel := make([]float64, len(samples))
 	rightChannel := make([]float64, len(samples))
-	leftGain := (1 - pan) / 2
-	rightGain := (1 + pan) / 2
+	leftGain := math.Cos((pan + 1) * math.Pi / 4) // Equal-power panning
+	rightGain := math.Sin((pan + 1) * math.Pi / 4)
 
 	for i := range samples {
 		leftChannel[i] = samples[i] * leftGain
@@ -532,17 +562,41 @@ func GenerateNoise(noiseType int, length int, amount float64) []float64 {
 			noise[i] = (rand.Float64()*2 - 1) * amount
 		}
 	case NoisePink:
-		// Simple pink noise generation (more complex implementations exist)
+		// Basic pink noise approximation
+		var b0, b1, b2, b3, b4, b5, b6 float64
 		for i := range noise {
-			noise[i] = (rand.Float64()*2 - 1) * amount * math.Pow(1/float64(i+1), 0.5)
+			white := rand.Float64()*2 - 1
+			b0 = 0.99886*b0 + white*0.0555179
+			b1 = 0.99332*b1 + white*0.0750759
+			b2 = 0.96900*b2 + white*0.1538520
+			b3 = 0.86650*b3 + white*0.3104856
+			b4 = 0.55000*b4 + white*0.5329522
+			b5 = -0.7616*b5 - white*0.0168980
+			value := (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white*0.5362) * amount / 3.5
+			b6 = white * 0.115926
+			// Clamp the value
+			if value > amount {
+				value = amount
+			} else if value < -amount {
+				value = -amount
+			}
+			noise[i] = value
 		}
 	case NoiseBrown:
 		// Brownian noise generation
-		prev := 0.0
+		var lastOutput float64
 		for i := range noise {
-			change := (rand.Float64()*2 - 1) * amount / 10
-			noise[i] = prev + change
-			prev = noise[i]
+			white := (rand.Float64()*2 - 1) * amount / 10
+			value := (lastOutput + (0.02 * white)) / 1.02
+			lastOutput = value
+			value *= 3.5 // (roughly) compensate for gain
+			// Clamp the value
+			if value > amount {
+				value = amount
+			} else if value < -amount {
+				value = -amount
+			}
+			noise[i] = value
 		}
 	}
 	return noise
@@ -551,10 +605,121 @@ func GenerateNoise(noiseType int, length int, amount float64) []float64 {
 // ApplyFrequencyModulation applies frequency modulation to a waveform using a modulator frequency and depth
 func ApplyFrequencyModulation(samples []float64, modFreq, modDepth float64, sampleRate int) []float64 {
 	modulated := make([]float64, len(samples))
+	carrierPhase := 0.0
+	modulatorPhase := 0.0
 	for i := range samples {
-		t := float64(i) / float64(sampleRate)
-		modulator := math.Sin(2*math.Pi*modFreq*t) * modDepth
-		modulated[i] = math.Sin(2*math.Pi*t*modulator) * samples[i]
+		carrierFreq := modDepth * math.Sin(2*math.Pi*modFreq*modulatorPhase)
+		carrierPhase += carrierFreq / float64(sampleRate)
+		modulated[i] = math.Sin(2*math.Pi*carrierPhase) * samples[i]
+		modulatorPhase += 1.0 / float64(sampleRate)
 	}
 	return modulated
+}
+
+// ApplyFadeIn applies a fade-in to the start of the samples using the specified fade curve
+func ApplyFadeIn(samples []float64, fadeDuration float64, sampleRate int, curve FadeCurve) []float64 {
+	fadeSamples := int(fadeDuration * float64(sampleRate))
+	if fadeSamples > len(samples) {
+		fadeSamples = len(samples)
+	}
+	for i := 0; i < fadeSamples; i++ {
+		t := float64(i) / float64(fadeSamples)
+		multiplier := curve(t)
+		samples[i] *= multiplier
+	}
+	return samples
+}
+
+// ApplyFadeOut applies a fade-out to the end of the samples using the specified fade curve
+func ApplyFadeOut(samples []float64, fadeDuration float64, sampleRate int, curve FadeCurve) []float64 {
+	totalSamples := len(samples)
+	fadeSamples := int(fadeDuration * float64(sampleRate))
+	if fadeSamples > totalSamples {
+		fadeSamples = totalSamples
+	}
+	for i := 0; i < fadeSamples; i++ {
+		t := float64(i) / float64(fadeSamples)
+		multiplier := curve(1.0 - t)
+		index := totalSamples - fadeSamples + i
+		if index >= 0 && index < totalSamples {
+			samples[index] *= multiplier
+		}
+	}
+	return samples
+}
+
+// GenerateSweepWaveform generates a frequency sweep waveform based on the settings.
+func (cfg *Settings) GenerateSweepWaveform() ([]float64, error) {
+	numSamples := int(cfg.Duration * float64(cfg.SampleRate))
+	samples := make([]float64, numSamples)
+
+	for i := 0; i < numSamples; i++ {
+		t := float64(i) / float64(cfg.SampleRate)
+		// Calculate the frequency at time t
+		frequency := cfg.StartFreq * math.Pow(cfg.EndFreq/cfg.StartFreq, t/cfg.Duration)
+		var sample float64
+
+		switch cfg.WaveformType {
+		case WaveSine:
+			sample = math.Sin(2 * math.Pi * frequency * t)
+		case WaveTriangle:
+			sample = 2*math.Abs(2*(t*frequency-math.Floor(t*frequency+0.5))) - 1
+		case WaveSawtooth:
+			sample = 2 * (t*frequency - math.Floor(0.5+t*frequency))
+		case WaveSquare:
+			sample = math.Copysign(1.0, math.Sin(2*math.Pi*frequency*t))
+		default:
+			return nil, fmt.Errorf("unsupported waveform type: %d", cfg.WaveformType)
+		}
+
+		samples[i] = sample
+	}
+
+	return samples, nil
+}
+
+// ApplyChorus applies a chorus effect to the samples
+func ApplyChorus(samples []float64, sampleRate int, delaySec float64, depth float64, rate float64) []float64 {
+	delaySamples := int(delaySec * float64(sampleRate))
+	modulated := make([]float64, len(samples))
+	for i := 0; i < len(samples); i++ {
+		t := float64(i) / float64(sampleRate)
+		modulation := depth * math.Sin(2*math.Pi*rate*t)
+		delay := int(float64(delaySamples) * (1 + modulation))
+		index := i - delay
+		if index >= 0 && index < len(samples) {
+			modulated[i] = (samples[i] + samples[index]) / 2
+		} else {
+			modulated[i] = samples[i]
+		}
+	}
+	return modulated
+}
+
+// LinearFade is a linear fade curve
+func LinearFade(t float64) float64 {
+	return t
+}
+
+// QuadraticFade is a quadratic (ease-in) fade curve
+func QuadraticFade(t float64) float64 {
+	return t * t
+}
+
+// ExponentialFade is an exponential fade curve
+func ExponentialFade(t float64) float64 {
+	return math.Pow(2, 10*(t-1))
+}
+
+// LogarithmicFade is a logarithmic fade curve
+func LogarithmicFade(t float64) float64 {
+	if t == 0 {
+		return 0
+	}
+	return math.Log10(t*9 + 1)
+}
+
+// SineFade is a sinusoidal fade curve
+func SineFade(t float64) float64 {
+	return math.Sin((t * math.Pi) / 2)
 }

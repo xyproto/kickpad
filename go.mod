@@ -5,7 +5,7 @@ go 1.23.1
 require (
 	github.com/AllenDang/giu v0.8.1
 	github.com/go-audio/wav v1.1.0
-	github.com/xyproto/synth v1.1.0
+	github.com/xyproto/synth v1.3.0
 )
 
 require (
@@ -18,6 +18,7 @@ require (
 	github.com/napsy/go-css v0.0.0-20221107082635-4ed403047a64 // indirect
 	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8 // indirect
 	github.com/sahilm/fuzzy v0.1.1 // indirect
+	github.com/veandco/go-sdl2 v0.4.40 // indirect
 	golang.design/x/hotkey v0.4.1 // indirect
 	golang.design/x/mainthread v0.3.0 // indirect
 	golang.org/x/image v0.18.0 // indirect
