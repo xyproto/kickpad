@@ -34,6 +34,8 @@ Kick drum audio sample generator. Note that this entire program is a bit experim
 
 ## Installation
 
+Note that these instructions needs more testing. Please create an issue or PR if they need an improvement.
+
 ### Arch Linux
 
 #### Quick Version
@@ -86,7 +88,7 @@ Run Kickpad:
 
     kickpad
 
-When running kickpad the next time, opening a terminal and typing in `kickpad` is enough.    
+When running kickpad the next time, opening a terminal and typing in `kickpad` is enough.
 
 ## Running
 
