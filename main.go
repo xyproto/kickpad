@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image/color"
 	"math"
+	"math/cmplx"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -11,20 +12,21 @@ import (
 
 	g "github.com/AllenDang/giu"
 	"github.com/go-audio/wav"
+	"github.com/mjibson/go-dsp/fft"
 	"github.com/xyproto/synth"
 )
 
 const (
-	versionString   = "Kickpad 0.0.1"
+	versionString   = "Kickpad 1.1.0"
 	buttonSize      = 100
 	numPads         = 16
 	maxGenerations  = 1000
-	maxStagnation   = 50 // Stop after 50 generations with no fitness improvement
+	maxStagnation   = 10 // Stop after 10 generations with no fitness improvement
 	defaultBitDepth = 16
 	populationSize  = 100
 	tournamentSize  = 5
-	eliteCount      = 5
-	mutationRate    = 0.1
+	eliteCount      = 10
+	mutationRate    = 0.05
 
 	// Minimum and Maximum values for ADSR parameters
 	minAttack = 0.05 // seconds
@@ -130,15 +132,28 @@ func playWavFile() error {
 	return nil
 }
 
-// Compare two waveforms using Mean Squared Error (MSE) with duration penalties
+// compareWaveformsSafe compares two waveforms using both time-domain and frequency-domain MSE
 func compareWaveformsSafe(individual *synth.Settings) float64 {
 	generatedWaveform, err := individual.GenerateKickWaveform()
 	if err != nil {
 		return math.Inf(1) // Assign worst fitness if generation fails
 	}
 
-	// Calculate MSE between generated and target waveforms
-	mse := compareWaveforms(generatedWaveform, loadedWaveform)
+	// Ensure both waveforms have the same sample rate
+	if individual.SampleRate != sampleRate {
+		// Resample if necessary (implement resampling if your application requires it)
+		// For simplicity, we assume the sample rates match
+	}
+
+	// Calculate time-domain MSE
+	timeMSE := compareWaveforms(generatedWaveform, loadedWaveform)
+
+	// Calculate frequency-domain MSE
+	freqMSE := compareWaveformsFFT(generatedWaveform, loadedWaveform, sampleRate)
+
+	// Combine the two MSEs with weighting factors
+	// You can adjust the weights based on which aspect you want to prioritize
+	combinedMSE := 0.5*timeMSE + 0.5*freqMSE
 
 	// Calculate expected duration based on ADSR parameters
 	expectedDuration := individual.Attack + individual.Decay + individual.Release // Assuming Sustain does not add to duration
@@ -146,16 +161,74 @@ func compareWaveformsSafe(individual *synth.Settings) float64 {
 	// Apply penalty if duration is below the minimum threshold
 	if expectedDuration < minSampleDuration {
 		penalty := (minSampleDuration - expectedDuration) * 1000 // Scale penalty appropriately
-		mse += penalty
+		combinedMSE += penalty
 	}
 
 	// Apply penalty if duration is above the maximum threshold
 	if expectedDuration > maxSampleDuration {
 		penalty := (expectedDuration - maxSampleDuration) * 1000 // Scale penalty appropriately
-		mse += penalty
+		combinedMSE += penalty
 	}
 
+	return combinedMSE
+}
+
+// compareWaveformsFFT compares two waveforms in the frequency domain using FFT-based MSE
+func compareWaveformsFFT(waveform1, waveform2 []float64, sampleRate int) float64 {
+	if waveform1 == nil || waveform2 == nil {
+		return math.Inf(1) // Assign worst fitness if any waveform is nil
+	}
+
+	// Determine the length for FFT (use the next power of two for efficiency)
+	n := nextPowerOfTwo(min(len(waveform1), len(waveform2)))
+
+	// Zero-pad the waveforms to length n
+	padded1 := make([]float64, n)
+	padded2 := make([]float64, n)
+	copy(padded1, waveform1)
+	copy(padded2, waveform2)
+
+	// Perform FFT on both waveforms
+	complex1 := fft.FFTReal(padded1)
+	complex2 := fft.FFTReal(padded2)
+
+	// Compute magnitude spectra
+	mag1 := make([]float64, n)
+	mag2 := make([]float64, n)
+	for i := 0; i < n; i++ {
+		mag1[i] = cmplx.Abs(complex1[i])
+		mag2[i] = cmplx.Abs(complex2[i])
+	}
+
+	// Compute MSE between magnitude spectra
+	mse := 0.0
+	for i := 0; i < n; i++ {
+		diff := mag1[i] - mag2[i]
+		mse += diff * diff
+	}
+	mse /= float64(n)
+
 	return mse
+}
+
+// Helper function to find the next power of two greater than or equal to n
+func nextPowerOfTwo(n int) int {
+	if n <= 0 {
+		return 1
+	}
+	power := 1
+	for power < n {
+		power <<= 1
+	}
+	return power
+}
+
+// Helper function to find the minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // Compare two waveforms using Mean Squared Error (MSE)
@@ -259,7 +332,7 @@ func setStatusMessage(msg string) {
 	statusMessage = msg
 }
 
-func optimizeSettings() {
+func optimizeSettings(allWaveforms bool) {
 	if len(loadedWaveform) == 0 {
 		setStatusMessage("Error: No .wav file loaded. Please load a .wav file first.")
 		return
@@ -274,7 +347,11 @@ func optimizeSettings() {
 	for i := 0; i < populationSize; i++ {
 		population[i] = synth.NewRandom(nil, sampleRate, bitDepth)
 		// Ensure WaveformType is within the desired range
-		population[i].WaveformType = rand.Intn(4) // Sine, Triangle, Sawtooth, or Square wave
+		if !allWaveforms {
+			population[i].WaveformType = rand.Intn(2) // Sine or Triangle
+		} else {
+			population[i].WaveformType = rand.Intn(7) // "Sine", "Triangle", "Sawtooth", "Square", "Noise White", "Noise Pink" or "Noise Brown"
+		}
 
 		// Clamp ADSR and other parameters to their min and max values
 		population[i].Attack = clamp(population[i].Attack, minAttack, maxAttack)
@@ -358,8 +435,8 @@ func optimizeSettings() {
 			child1, child2 := singlePointCrossover(parent1, parent2)
 
 			// Mutation
-			mutateSettings(child1)
-			mutateSettings(child2)
+			mutateSettings(child1, false)
+			mutateSettings(child2, false)
 
 			// Ensure mutated children respect parameter constraints
 			child1.Attack = clamp(child1.Attack, minAttack, maxAttack)
@@ -403,7 +480,7 @@ func optimizeSettings() {
 }
 
 // Function to mutate a single config
-func mutateSettings(cfg *synth.Settings) {
+func mutateSettings(cfg *synth.Settings, allWaveforms bool) {
 	// Mutate the configuration with a certain probability
 	if rand.Float64() < mutationRate {
 		cfg.Attack = clamp(cfg.Attack*(0.8+rand.Float64()*0.4), minAttack, maxAttack)
@@ -432,7 +509,11 @@ func mutateSettings(cfg *synth.Settings) {
 
 	// Mutate the waveform type with a certain probability
 	if rand.Float64() < mutationRate {
-		cfg.WaveformType = rand.Intn(4) // Sine, Triangle, Sawtooth, or Square wave
+		if !allWaveforms {
+			cfg.WaveformType = rand.Intn(2) // Sine or Triangle
+		} else {
+			cfg.WaveformType = rand.Intn(7) // "Sine", "Triangle", "Sawtooth", "Square", "Noise White", "Noise Pink" or "Noise Brown"
+		}
 	}
 
 	// Mutate the noise amount with a certain probability
@@ -486,7 +567,7 @@ func createPadWidget(cfg *synth.Settings, padLabel string, padIndex int) g.Widge
 				})),
 			// Mutate button: Mutate the selected pad and update the sliders
 			g.Button("Mutate").OnClick(func() {
-				mutateSettings(pads[padIndex]) // Mutate the selected pad and update settings
+				mutateSettings(pads[padIndex], true) // Mutate the selected pad and update settings
 				activePadIndex = padIndex
 				g.Update() // Update the sliders with mutated settings
 			}),
@@ -681,7 +762,8 @@ func generateTrainingButtons() g.Widget {
 				if !trainingOngoing {
 					cancelTraining = make(chan bool)
 					trainingOngoing = true
-					go optimizeSettings() // Run the optimization in a goroutine
+					const allWaveforms = true         // Only Sine and Triangle, or all available waveforms?
+					go optimizeSettings(allWaveforms) // Run the optimization in a goroutine
 				}
 			}),
 			g.Button("Play WAV").OnClick(func() {
