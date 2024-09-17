@@ -13,14 +13,12 @@ import (
 )
 
 const (
-	versionString = "Kickpad 0.0.1"
-
-	buttonSize     = 100
-	numPads        = 16
-	maxGenerations = 1000
-	maxStagnation  = 50 // Stop after 50 generations with no fitness improvement
-	sampleRate     = 44100
-	bitDepth       = 16
+	versionString   = "Kickpad 0.0.1"
+	buttonSize      = 100
+	numPads         = 16
+	maxGenerations  = 1000
+	maxStagnation   = 50 // Stop after 50 generations with no fitness improvement
+	defaultBitDepth = 16
 )
 
 var (
@@ -31,10 +29,15 @@ var (
 	wavFilePath     string    = "kick808.wav" // Default .wav file path
 	statusMessage   string                    // Status message displayed at the bottom
 	cancelTraining  chan bool                 // Channel to cancel GA training
+	sampleRates               = []int{44100, 48000, 96000, 192000}
+	bitDepth        int       = defaultBitDepth
+	sampleRate      int       = sampleRates[0]
 )
 
 // Dropdown selection index for the waveform
 var waveformSelectedIndex int32
+var sampleRateIndex int32
+var bitDepthSelected bool
 
 // Load a .wav file and store the waveform for comparison
 func loadWavFile() error {
@@ -311,7 +314,25 @@ func createSlidersForSelectedPad() g.Widget {
 		),
 		g.Dummy(30, 0),
 		g.Row(
-			// Buttons under the sliders: Play, Randomize all, Save
+			g.Label("Sample Rate"),
+			g.Combo("Sample Rate", fmt.Sprintf("%d Hz", sampleRates[sampleRateIndex]), []string{
+				"44100 Hz", "48000 Hz", "96000 Hz", "192000 Hz",
+			}, &sampleRateIndex).Size(150).OnChange(func() {
+				sampleRate = sampleRates[sampleRateIndex]
+			}),
+		),
+		g.Row(
+			g.Label("Bit Depth"),
+			g.Checkbox("24-bit", &bitDepthSelected).OnChange(func() {
+				if bitDepthSelected {
+					bitDepth = 24
+				} else {
+					bitDepth = 16
+				}
+			}),
+		),
+		g.Dummy(30, 0),
+		g.Row(
 			g.Button("Play").OnClick(func() {
 				statusMessage = ""
 				err := synth.FFPlayKick(pads[activePadIndex])
