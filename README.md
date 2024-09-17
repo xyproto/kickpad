@@ -2,6 +2,8 @@
 
 Kick drum audio sample generator. Note that this entire program is a bit experimental.
 
+![screenshot](img/screenshot.png)
+
 ## Features and limitations
 
 * Can be used for sound design of kick drum sounds, for trying different waveforms and selecting different parameters.
@@ -9,11 +11,7 @@ Kick drum audio sample generator. Note that this entire program is a bit experim
 * Can be used for setting up 16 different kick drum sound, which can then be played by clicking the pad buttons.
 * Uses `ffplay` for playing audio samples, for now, since I had issues combining SDL2 mixer package with the `giu` package. This may cause some clicks in the audio of more than one waveform is being played at once.
 
-## Screenshot
-
-![screenshot](img/screenshot.png)
-
-## Quick explanation of the UI
+## What are all the buttons?
 
 * There are 16 large buttons to the left, named "Pad 1" to "Pad 16".
 * One of the 16 pads are always active, and the status text in the upper right will reflect this and say `Kick Pad 1 settings:` if `Pad 1` is active.
