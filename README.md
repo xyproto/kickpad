@@ -30,6 +30,8 @@ Kick drum audio sample generator. Note that this entire program is a bit experim
 ### Run-time
 
 * `ffplay`
+* `glfw`
+* `sdl2` + `sdl2_mixer`
 
 ### Build-time
 
