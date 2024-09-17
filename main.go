@@ -411,7 +411,7 @@ func optimizeSettings(allWaveforms bool) {
 		} else {
 			stagnationCount++
 			if stagnationCount >= maxStagnation {
-				setStatusMessage("Training stopped due to no improvement in 50 generations.")
+				setStatusMessage(fmt.Sprintf("Training stopped due to no improvement in %d generations.", maxStagnation))
 				trainingOngoing = false
 				return
 			}
