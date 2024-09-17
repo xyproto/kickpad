@@ -2,10 +2,12 @@ package main
 
 import (
 	"fmt"
+	"image/color"
 	"math"
 	"math/rand"
 	"os"
 	"path/filepath"
+	"sync"
 
 	g "github.com/AllenDang/giu"
 	"github.com/go-audio/wav"
@@ -19,6 +21,42 @@ const (
 	maxGenerations  = 1000
 	maxStagnation   = 50 // Stop after 50 generations with no fitness improvement
 	defaultBitDepth = 16
+	populationSize  = 100
+	tournamentSize  = 5
+	eliteCount      = 5
+	mutationRate    = 0.1
+
+	// Minimum and Maximum values for ADSR parameters
+	minAttack = 0.05 // seconds
+	maxAttack = 0.5  // seconds
+
+	minDecay = 0.05 // seconds
+	maxDecay = 0.5  // seconds
+
+	minSustain = 0.1 // Sustain level (0.0 to 1.0)
+	maxSustain = 1.0 // Sustain level
+
+	minRelease = 0.05 // seconds
+	maxRelease = 1.0  // seconds
+
+	// Additional parameters
+	minDrive = 0.0
+	maxDrive = 1.0
+
+	minFilterCutoff = 500   // Hz
+	maxFilterCutoff = 10000 // Hz
+
+	minSweep = 0.1 // seconds
+	maxSweep = 2.0 // seconds
+
+	minPitchDecay = 0.1 // seconds
+	maxPitchDecay = 1.5 // seconds
+
+	minNoiseAmount = 0.0
+	maxNoiseAmount = 1.0
+
+	minSampleDuration = 0.1 // seconds
+	maxSampleDuration = 2.0 // seconds
 )
 
 var (
@@ -26,12 +64,14 @@ var (
 	pads            [numPads]*synth.Settings
 	loadedWaveform  []float64                 // Loaded .wav file waveform data
 	trainingOngoing bool                      // Indicates whether the GA is running
-	wavFilePath     string    = "kick808.wav" // Default .wav file path
+	wavFilePath     string    = "kick909.wav" // Default .wav file path
 	statusMessage   string                    // Status message displayed at the bottom
 	cancelTraining  chan bool                 // Channel to cancel GA training
 	sampleRates               = []int{44100, 48000, 96000, 192000}
 	bitDepth        int       = defaultBitDepth
 	sampleRate      int       = sampleRates[0]
+
+	mu sync.Mutex
 
 	// Dropdown selection index for the waveform
 	waveformSelectedIndex int32
@@ -90,8 +130,40 @@ func playWavFile() error {
 	return nil
 }
 
+// Compare two waveforms using Mean Squared Error (MSE) with duration penalties
+func compareWaveformsSafe(individual *synth.Settings) float64 {
+	generatedWaveform, err := individual.GenerateKickWaveform()
+	if err != nil {
+		return math.Inf(1) // Assign worst fitness if generation fails
+	}
+
+	// Calculate MSE between generated and target waveforms
+	mse := compareWaveforms(generatedWaveform, loadedWaveform)
+
+	// Calculate expected duration based on ADSR parameters
+	expectedDuration := individual.Attack + individual.Decay + individual.Release // Assuming Sustain does not add to duration
+
+	// Apply penalty if duration is below the minimum threshold
+	if expectedDuration < minSampleDuration {
+		penalty := (minSampleDuration - expectedDuration) * 1000 // Scale penalty appropriately
+		mse += penalty
+	}
+
+	// Apply penalty if duration is above the maximum threshold
+	if expectedDuration > maxSampleDuration {
+		penalty := (expectedDuration - maxSampleDuration) * 1000 // Scale penalty appropriately
+		mse += penalty
+	}
+
+	return mse
+}
+
 // Compare two waveforms using Mean Squared Error (MSE)
 func compareWaveforms(waveform1, waveform2 []float64) float64 {
+	if waveform1 == nil || waveform2 == nil {
+		return math.Inf(1) // Assign worst fitness if any waveform is nil
+	}
+
 	minLength := len(waveform1)
 	if len(waveform2) < minLength {
 		minLength = len(waveform2)
@@ -112,83 +184,216 @@ func randomizeAllPads() {
 	}
 }
 
-// Function to optimize the settings using a genetic algorithm without writing to disk
+// Tournament Selection: Selects the best individual from a random subset of the population
+func tournamentSelection(population []*synth.Settings, fitnesses []float64, tournamentSize int) *synth.Settings {
+	// Randomly select the first competitor
+	bestIndex := rand.Intn(len(population))
+	best := population[bestIndex]
+	bestFitness := fitnesses[bestIndex]
+
+	// Iterate through the rest of the tournament competitors
+	for i := 1; i < tournamentSize; i++ {
+		competitorIndex := rand.Intn(len(population))
+		competitorFitness := fitnesses[competitorIndex]
+		if competitorFitness < bestFitness {
+			best = population[competitorIndex]
+			bestFitness = competitorFitness
+			bestIndex = competitorIndex
+		}
+	}
+	return best
+}
+
+// Single-Point Crossover: Combines two parents to produce two offspring
+func singlePointCrossover(parent1, parent2 *synth.Settings) (*synth.Settings, *synth.Settings) {
+	child1 := synth.CopySettings(parent1)
+	child2 := synth.CopySettings(parent2)
+
+	// Define crossover points for each parameter
+	// For simplicity, we'll randomly decide for each parameter whether to take from parent1 or parent2
+	if rand.Float64() < 0.5 {
+		child1.Attack = parent2.Attack
+		child2.Attack = parent1.Attack
+	}
+	if rand.Float64() < 0.5 {
+		child1.Decay = parent2.Decay
+		child2.Decay = parent1.Decay
+	}
+	if rand.Float64() < 0.5 {
+		child1.Sustain = parent2.Sustain
+		child2.Sustain = parent1.Sustain
+	}
+	if rand.Float64() < 0.5 {
+		child1.Release = parent2.Release
+		child2.Release = parent1.Release
+	}
+	if rand.Float64() < 0.5 {
+		child1.Drive = parent2.Drive
+		child2.Drive = parent1.Drive
+	}
+	if rand.Float64() < 0.5 {
+		child1.FilterCutoff = parent2.FilterCutoff
+		child2.FilterCutoff = parent1.FilterCutoff
+	}
+	if rand.Float64() < 0.5 {
+		child1.Sweep = parent2.Sweep
+		child2.Sweep = parent1.Sweep
+	}
+	if rand.Float64() < 0.5 {
+		child1.PitchDecay = parent2.PitchDecay
+		child2.PitchDecay = parent1.PitchDecay
+	}
+	if rand.Float64() < 0.5 {
+		child1.WaveformType = parent2.WaveformType
+		child2.WaveformType = parent1.WaveformType
+	}
+	if rand.Float64() < 0.5 {
+		child1.NoiseAmount = parent2.NoiseAmount
+		child2.NoiseAmount = parent1.NoiseAmount
+	}
+
+	return child1, child2
+}
+
+func setStatusMessage(msg string) {
+	statusMessage = msg
+}
+
 func optimizeSettings() {
 	if len(loadedWaveform) == 0 {
-		statusMessage = "Error: No .wav file loaded. Please load a .wav file first."
+		setStatusMessage("Error: No .wav file loaded. Please load a .wav file first.")
 		return
 	}
 
 	// Display initial status message before starting the training
-	statusMessage = "Training started..."
+	setStatusMessage("Training started...")
 	g.Update()
 
-	population := make([]*synth.Settings, 100)
-	for i := 0; i < len(population); i++ {
+	// Initialize population
+	population := make([]*synth.Settings, populationSize)
+	for i := 0; i < populationSize; i++ {
 		population[i] = synth.NewRandom(nil, sampleRate, bitDepth)
-		// Start out with a randomized selection of only some oscillators
-		population[i].WaveformType = rand.Intn(4) // Mutate to Sine, Triangle, Sawtooth or Square wave
+		// Ensure WaveformType is within the desired range
+		population[i].WaveformType = rand.Intn(4) // Sine, Triangle, Sawtooth, or Square wave
+
+		// Clamp ADSR and other parameters to their min and max values
+		population[i].Attack = clamp(population[i].Attack, minAttack, maxAttack)
+		population[i].Decay = clamp(population[i].Decay, minDecay, maxDecay)
+		population[i].Sustain = clamp(population[i].Sustain, minSustain, maxSustain)
+		population[i].Release = clamp(population[i].Release, minRelease, maxRelease)
+		population[i].Drive = clamp(population[i].Drive, minDrive, maxDrive)
+		population[i].FilterCutoff = clamp(population[i].FilterCutoff, minFilterCutoff, maxFilterCutoff)
+		population[i].Sweep = clamp(population[i].Sweep, minSweep, maxSweep)
+		population[i].PitchDecay = clamp(population[i].PitchDecay, minPitchDecay, maxPitchDecay)
+		population[i].NoiseAmount = clamp(population[i].NoiseAmount, minNoiseAmount, maxNoiseAmount)
 	}
 
-	bestSettings := pads[activePadIndex]
-	bestFitness := math.Inf(1)
+	bestSettings := synth.CopySettings(population[0])
+	bestFitness := compareWaveformsSafe(bestSettings)
 	stagnationCount := 0
 
 	for generation := 0; generation < maxGenerations && trainingOngoing; generation++ {
 		select {
 		case <-cancelTraining:
-			statusMessage = "Training canceled."
+			setStatusMessage("Training canceled.")
 			trainingOngoing = false
 			return
 		default:
 		}
 
-		improved := false
+		// Evaluate fitness for the current population
+		fitnesses := make([]float64, populationSize)
+		for i, individual := range population {
+			fitnesses[i] = compareWaveformsSafe(individual)
+		}
 
-		for _, individual := range population {
-			// Generate the kick in memory
-			generatedWaveform, err := individual.GenerateKickWaveform()
-			if err != nil {
-				statusMessage = "Error: Failed to generate kick."
-				continue
-			}
-
-			// Compare the generated waveform with the target waveform
-			fitness := compareWaveforms(generatedWaveform, loadedWaveform)
-
-			// Update best config if the fitness is better
-			if fitness < bestFitness {
-				bestFitness = fitness
-				bestSettings = synth.CopySettings(individual)
-				pads[activePadIndex] = bestSettings // Save the best result to the active pad
-				pads[activePadIndex].SampleRate = sampleRate
-				pads[activePadIndex].BitDepth = bitDepth
-				improved = true
-
-				if bestFitness < 1e-3 {
-					statusMessage = fmt.Sprintf("Global optimum found at generation %d!", generation)
-					trainingOngoing = false
-					return
-				}
+		// Find the best individual in the current population
+		currentBestFitness := math.Inf(1)
+		currentBestIndex := -1
+		for i, fitness := range fitnesses {
+			if fitness < currentBestFitness {
+				currentBestFitness = fitness
+				currentBestIndex = i
 			}
 		}
 
-		if !improved {
-			stagnationCount++
-			if stagnationCount >= maxStagnation {
-				statusMessage = "Training stopped due to no improvement in 50 generations."
+		// Update best settings if a better individual is found
+		if currentBestIndex != -1 && fitnesses[currentBestIndex] < bestFitness {
+			bestFitness = fitnesses[currentBestIndex]
+			bestSettings = synth.CopySettings(population[currentBestIndex])
+			pads[activePadIndex] = bestSettings // Save the best result to the active pad
+			pads[activePadIndex].SampleRate = sampleRate
+			pads[activePadIndex].BitDepth = bitDepth
+			stagnationCount = 0
+
+			if bestFitness < 1e-3 {
+				setStatusMessage(fmt.Sprintf("Global optimum found at generation %d!", generation))
 				trainingOngoing = false
 				return
 			}
 		} else {
-			stagnationCount = 0
+			stagnationCount++
+			if stagnationCount >= maxStagnation {
+				setStatusMessage("Training stopped due to no improvement in 50 generations.")
+				trainingOngoing = false
+				return
+			}
 		}
 
-		for i := 0; i < len(population); i++ {
-			mutateSettings(population[i])
+		// Create a new population
+		newPopulation := make([]*synth.Settings, 0, populationSize)
+
+		// Elitism: carry over the best individuals to the new population
+		for i := 0; i < eliteCount && i < populationSize; i++ {
+			newPopulation = append(newPopulation, synth.CopySettings(bestSettings))
 		}
 
-		statusMessage = fmt.Sprintf("Generation %d: Best fitness = %f", generation, bestFitness)
+		// Generate the rest of the population through selection, crossover, and mutation
+		for len(newPopulation) < populationSize {
+			// Selection
+			parent1 := tournamentSelection(population, fitnesses, tournamentSize)
+			parent2 := tournamentSelection(population, fitnesses, tournamentSize)
+
+			// Crossover
+			child1, child2 := singlePointCrossover(parent1, parent2)
+
+			// Mutation
+			mutateSettings(child1)
+			mutateSettings(child2)
+
+			// Ensure mutated children respect parameter constraints
+			child1.Attack = clamp(child1.Attack, minAttack, maxAttack)
+			child1.Decay = clamp(child1.Decay, minDecay, maxDecay)
+			child1.Sustain = clamp(child1.Sustain, minSustain, maxSustain)
+			child1.Release = clamp(child1.Release, minRelease, maxRelease)
+			child1.Drive = clamp(child1.Drive, minDrive, maxDrive)
+			child1.FilterCutoff = clamp(child1.FilterCutoff, minFilterCutoff, maxFilterCutoff)
+			child1.Sweep = clamp(child1.Sweep, minSweep, maxSweep)
+			child1.PitchDecay = clamp(child1.PitchDecay, minPitchDecay, maxPitchDecay)
+			child1.NoiseAmount = clamp(child1.NoiseAmount, minNoiseAmount, maxNoiseAmount)
+
+			child2.Attack = clamp(child2.Attack, minAttack, maxAttack)
+			child2.Decay = clamp(child2.Decay, minDecay, maxDecay)
+			child2.Sustain = clamp(child2.Sustain, minSustain, maxSustain)
+			child2.Release = clamp(child2.Release, minRelease, maxRelease)
+			child2.Drive = clamp(child2.Drive, minDrive, maxDrive)
+			child2.FilterCutoff = clamp(child2.FilterCutoff, minFilterCutoff, maxFilterCutoff)
+			child2.Sweep = clamp(child2.Sweep, minSweep, maxSweep)
+			child2.PitchDecay = clamp(child2.PitchDecay, minPitchDecay, maxPitchDecay)
+			child2.NoiseAmount = clamp(child2.NoiseAmount, minNoiseAmount, maxNoiseAmount)
+
+			newPopulation = append(newPopulation, child1, child2)
+		}
+
+		// If the new population exceeds the desired size, trim it
+		if len(newPopulation) > populationSize {
+			newPopulation = newPopulation[:populationSize]
+		}
+
+		population = newPopulation
+
+		// Update the status message
+		setStatusMessage(fmt.Sprintf("Generation %d: Best fitness = %f", generation, bestFitness))
 		g.Update() // Update UI with the new generation status
 	}
 
@@ -199,44 +404,86 @@ func optimizeSettings() {
 
 // Function to mutate a single config
 func mutateSettings(cfg *synth.Settings) {
-	mutationFactor := 0.01
-
-	// Mutate the configuration
-	cfg.Attack *= (0.8 + rand.Float64()*0.4)
-	cfg.Decay *= (0.8 + rand.Float64()*0.4)
-	cfg.Sustain *= (0.8 + rand.Float64()*0.4)
-	cfg.Release *= (0.8 + rand.Float64()*0.4)
-	cfg.Drive *= (0.8 + rand.Float64()*0.4)
-	cfg.FilterCutoff *= (0.8 + rand.Float64()*0.4)
-	cfg.Sweep *= (0.8 + rand.Float64()*0.4)
-	cfg.PitchDecay *= (0.8 + rand.Float64()*0.4)
-
-	// Mutate the waveform and noise amounts
-	if rand.Float64() < mutationFactor {
-		cfg.WaveformType = rand.Intn(4) // Mutate to Sine, Triangle, Sawtooth or Square wave
+	// Mutate the configuration with a certain probability
+	if rand.Float64() < mutationRate {
+		cfg.Attack = clamp(cfg.Attack*(0.8+rand.Float64()*0.4), minAttack, maxAttack)
 	}
-	if rand.Float64() < mutationFactor {
-		cfg.NoiseAmount *= (0.8 + rand.Float64()*0.4)
+	if rand.Float64() < mutationRate {
+		cfg.Decay = clamp(cfg.Decay*(0.8+rand.Float64()*0.4), minDecay, maxDecay)
 	}
+	if rand.Float64() < mutationRate {
+		cfg.Sustain = clamp(cfg.Sustain*(0.8+rand.Float64()*0.4), minSustain, maxSustain)
+	}
+	if rand.Float64() < mutationRate {
+		cfg.Release = clamp(cfg.Release*(0.8+rand.Float64()*0.4), minRelease, maxRelease)
+	}
+	if rand.Float64() < mutationRate {
+		cfg.Drive = clamp(cfg.Drive*(0.8+rand.Float64()*0.4), minDrive, maxDrive)
+	}
+	if rand.Float64() < mutationRate {
+		cfg.FilterCutoff = clamp(cfg.FilterCutoff*(0.8+rand.Float64()*0.4), minFilterCutoff, maxFilterCutoff)
+	}
+	if rand.Float64() < mutationRate {
+		cfg.Sweep = clamp(cfg.Sweep*(0.8+rand.Float64()*0.4), minSweep, maxSweep)
+	}
+	if rand.Float64() < mutationRate {
+		cfg.PitchDecay = clamp(cfg.PitchDecay*(0.8+rand.Float64()*0.4), minPitchDecay, maxPitchDecay)
+	}
+
+	// Mutate the waveform type with a certain probability
+	if rand.Float64() < mutationRate {
+		cfg.WaveformType = rand.Intn(4) // Sine, Triangle, Sawtooth, or Square wave
+	}
+
+	// Mutate the noise amount with a certain probability
+	if rand.Float64() < mutationRate {
+		cfg.NoiseAmount = clamp(cfg.NoiseAmount*(0.8+rand.Float64()*0.4), minNoiseAmount, maxNoiseAmount)
+	}
+}
+
+// Helper function to clamp a value between min and max
+func clamp(value, min, max float64) float64 {
+	if value < min {
+		return min
+	}
+	if value > max {
+		return max
+	}
+	return value
 }
 
 // UI functions and pad widget handling
 func createPadWidget(cfg *synth.Settings, padLabel string, padIndex int) g.Widget {
-	return g.Style().SetColor(g.StyleColorButton, cfg.Color()).To(
+	buttonColor := cfg.Color()
+	padBorderColor := color.RGBA{0x0, 0x0, 0x0, 0xff} // black
+	padTextColor := color.RGBA{0x0, 0x0, 0x0, 0xff}   // black
+
+	luminance := 0.299*float64(buttonColor.R) + 0.587*float64(buttonColor.G) + 0.114*float64(buttonColor.B)
+
+	if luminance < 128 { // dark background color
+		padTextColor = color.RGBA{0xff, 0xff, 0xff, 0xff} // white
+	}
+
+	if padIndex == activePadIndex {
+		padBorderColor = color.RGBA{0xff, 0x0, 0x0, 0xff} // red
+	}
+
+	return g.Style().SetColor(g.StyleColorButton, buttonColor).To(
 		g.Column(
-			g.Button(padLabel).Size(buttonSize, buttonSize).OnClick(func() {
-				// Clear the status message when a pad is clicked
-				statusMessage = ""
-				// Set the clicked pad as active
-				activePadIndex = padIndex
-				// Then generate and play the sample (even during training)
-				go func() {
-					err := synth.FFPlayKick(pads[activePadIndex])
-					if err != nil {
-						statusMessage = fmt.Sprintf("Error: Failed to play kick: %v", err)
-					}
-				}()
-			}),
+			g.Style().SetColor(g.StyleColorText, padTextColor).SetColor(g.StyleColorBorder, padBorderColor).To(
+				g.Button(padLabel).Size(buttonSize, buttonSize).OnClick(func() {
+					// Clear the status message when a pad is clicked
+					statusMessage = ""
+					// Set the clicked pad as active
+					activePadIndex = padIndex
+					// Then generate and play the sample (even during training)
+					go func() {
+						err := synth.FFPlayKick(pads[activePadIndex])
+						if err != nil {
+							statusMessage = fmt.Sprintf("Error: Failed to play kick: %v", err)
+						}
+					}()
+				})),
 			// Mutate button: Mutate the selected pad and update the sliders
 			g.Button("Mutate").OnClick(func() {
 				mutateSettings(pads[padIndex]) // Mutate the selected pad and update settings
@@ -388,7 +635,7 @@ func loop() {
 				createSlidersForSelectedPad(),
 				g.Dummy(30, 0),
 				g.Row(
-					g.InputText(&wavFilePath).Size(200), // Default text is "kick808.wav"
+					g.InputText(&wavFilePath).Size(200),
 					g.Button("Load WAV").OnClick(func() {
 						err := loadWavFile()
 						if err != nil {
