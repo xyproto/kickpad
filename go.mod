@@ -6,7 +6,7 @@ require (
 	github.com/AllenDang/giu v0.8.1
 	github.com/go-audio/wav v1.1.0
 	github.com/mjibson/go-dsp v0.0.0-20180508042940-11479a337f12
-	github.com/xyproto/synth v1.5.2
+	github.com/xyproto/synth v1.5.3
 )
 
 require (
