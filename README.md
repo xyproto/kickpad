@@ -35,6 +35,9 @@ Kick drum audio sample generator. Note that this entire program is a bit experim
 
 Note that these instructions needs more testing. Please create an issue or PR if they need an improvement.
 
+* Build with `go build -tags enable_cimgui_sdl2,exclude_cimgui_glfw,sdl2` to depend on SDL2.
+* Build with `go build -tags enable_cimgui_glfw,exclude_cimgui_sdl` to depend on GLFW and the `ffplay` command.
+
 ### Arch Linux
 
 Kickpad is available in AUR and can be installed with ie. yay:
