@@ -117,10 +117,15 @@ func (cfg *Settings) GenerateAndSaveTo(t, directory string) (string, error) {
 	defer file.Close()
 	// Set the file as the output for the sound generation
 	cfg.Output = file
-	// Call the appropriate Generate function based on the type
-	_, err = cfg.Generate(t)
+	// Generate the samples for the requested type
+	samples, err := cfg.Generate(t)
 	if err != nil {
 		return "", err
+	}
+	// Save the generated samples to the WAV file
+	err = SaveToWav(file, samples, cfg.SampleRate, cfg.BitDepth)
+	if err != nil {
+		return "", fmt.Errorf("error saving to wav file: %v", err)
 	}
 	return fileName, nil
 }

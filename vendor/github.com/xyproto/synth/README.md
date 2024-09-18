@@ -11,4 +11,4 @@ This project is a bit experimental and a work in progress.
 ffplay is needed for playing samples, unless the project is built with the sdl2 go build tag.
 
 * License: MIT
-* Verison: 1.5.1
+* Verison: 1.5.2
