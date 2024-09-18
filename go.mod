@@ -6,7 +6,7 @@ require (
 	github.com/AllenDang/giu v0.8.1
 	github.com/go-audio/wav v1.1.0
 	github.com/mjibson/go-dsp v0.0.0-20180508042940-11479a337f12
-	github.com/xyproto/synth v1.4.4
+	github.com/xyproto/synth v1.5.1
 )
 
 require (
@@ -20,6 +20,9 @@ require (
 	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8 // indirect
 	github.com/sahilm/fuzzy v0.1.1 // indirect
 	github.com/veandco/go-sdl2 v0.4.40 // indirect
+	github.com/xyproto/binary v1.3.3 // indirect
+	github.com/xyproto/env/v2 v2.5.0 // indirect
+	github.com/xyproto/files v1.7.0 // indirect
 	golang.design/x/hotkey v0.4.1 // indirect
 	golang.design/x/mainthread v0.3.0 // indirect
 	golang.org/x/image v0.18.0 // indirect

@@ -5,29 +5,31 @@ import (
 	"io"
 	"math"
 	"os"
-	"os/exec"
 	"path/filepath"
 
 	"github.com/go-audio/audio"
 	"github.com/go-audio/wav"
 )
 
-// SaveToWav saves the waveform to a .wav file using the PCM format with the given bit depth.
 func SaveToWav(w io.WriteSeeker, samples []float64, sampleRate, bitDepth int) error {
 	if len(samples) == 0 {
 		return fmt.Errorf("cannot save empty waveform: no samples provided")
 	}
-
-	// Create a new WAV encoder for intN PCM
+	if bitDepth == 0 {
+		return fmt.Errorf("bitdepth should be 8, 16, 24 or 32, not 0")
+	}
 	enc := wav.NewEncoder(w, sampleRate, bitDepth, 1, 1) // Mono channel
-
-	// Create a buffer to store the PCM data
 	buf := &audio.IntBuffer{
 		Format: &audio.Format{SampleRate: sampleRate, NumChannels: 1},
 		Data:   make([]int, len(samples)),
 	}
-
 	switch bitDepth {
+	case 8:
+		// Convert from float64 to int8 for 8-bit WAV files
+		for i, sample := range samples {
+			scaled := sample*127 + 128 // Scale to unsigned 8-bit range (0 to 255)
+			buf.Data[i] = int(math.Max(math.Min(scaled, 255), 0))
+		}
 	case 16:
 		// Convert from float64 to int16 for 16-bit WAV files
 		for i, sample := range samples {
@@ -40,15 +42,18 @@ func SaveToWav(w io.WriteSeeker, samples []float64, sampleRate, bitDepth int) er
 			scaled := sample * float64(1<<23) // Scale to 24-bit range (-8388608 to 8388607)
 			buf.Data[i] = int(math.Max(math.Min(scaled, float64(8388607)), float64(-8388608)))
 		}
+	case 32:
+		// Convert from float64 to int32 for 32-bit WAV files
+		for i, sample := range samples {
+			scaled := sample * float64(math.MaxInt32) // Scale to int32 range
+			buf.Data[i] = int(math.Max(math.Min(scaled, float64(math.MaxInt32)), float64(math.MinInt32)))
+		}
 	default:
 		return fmt.Errorf("unsupported bit depth: %d", bitDepth)
 	}
-
-	// Write the IntBuffer to the WAV file
 	if err := enc.Write(buf); err != nil {
 		return fmt.Errorf("error writing wav file: %v", err)
 	}
-
 	return enc.Close()
 }
 
@@ -92,73 +97,30 @@ func LoadWav(filename string, monoToStereo bool) ([]float64, int, error) {
 	return samples, sampleRate, nil
 }
 
-// FFPlayWav plays a WAV file using ffplay
-func FFPlayWav(filePath string) error {
-	cmd := exec.Command("ffplay", "-nodisp", "-autoexit", filePath)
-	err := cmd.Start()
-	if err != nil {
-		return fmt.Errorf("error playing sound with ffplay: %v", err)
-	}
-	return cmd.Wait()
-}
-
-// FFPlayKick generates a Kick drum waveform, saves it to a temporary WAV file,
-// plays it using ffplay, and then deletes the temporary file.
-func FFPlayKick(cfg *Settings) error {
-	// Generate the kick drum waveform
-	samples, err := cfg.GenerateKickWaveform()
-	if err != nil {
-		return fmt.Errorf("error generating kick waveform: %v", err)
-	}
-
-	// Create a temporary WAV file
-	tmpFile, err := os.CreateTemp("", "kickdrum_*.wav")
-	if err != nil {
-		return fmt.Errorf("error creating temporary wav file: %v", err)
-	}
-	defer os.Remove(tmpFile.Name()) // Ensure the file is removed after playing
-
-	// Save the waveform to the temporary file using SaveToWav
-	if err := SaveToWav(tmpFile, samples, cfg.SampleRate, cfg.BitDepth); err != nil {
-		return fmt.Errorf("error saving wav file: %v", err)
-	}
-
-	// Play the temporary wav file using ffplay
-	err = FFPlayWav(tmpFile.Name())
-	if err != nil {
-		return fmt.Errorf("error playing wav file: %v", err)
-	}
-
-	return nil
-}
-
-// SaveKickTo generates kick samples and saves it to a specified directory, avoiding filename collisions.
-func (cfg *Settings) SaveKickTo(directory string) (string, error) {
+// GenerateAndSaveTo generates samples for a given type (e.g., "kick", "snare") and saves it to a specified directory, avoiding filename collisions.
+func (cfg *Settings) GenerateAndSaveTo(t, directory string) (string, error) {
 	n := 1
 	var fileName string
 	for {
-		// Construct the file path with an incrementing number
-		fileName = filepath.Join(directory, fmt.Sprintf("kick%d.wav", n))
+		// Construct the file path with an incrementing number based on the type
+		fileName = filepath.Join(directory, fmt.Sprintf("%s%d.wav", t, n))
 		if _, err := os.Stat(fileName); os.IsNotExist(err) {
 			break
 		}
 		n++
 	}
-
 	// Create the new file
 	file, err := os.Create(fileName)
 	if err != nil {
 		return "", err
 	}
 	defer file.Close()
-
-	// Set the file as the output for the kick generation
+	// Set the file as the output for the sound generation
 	cfg.Output = file
-
-	// Generate the kick and write to the file
-	if err := cfg.GenerateKick(); err != nil {
+	// Call the appropriate Generate function based on the type
+	_, err = cfg.Generate(t)
+	if err != nil {
 		return "", err
 	}
-
 	return fileName, nil
 }

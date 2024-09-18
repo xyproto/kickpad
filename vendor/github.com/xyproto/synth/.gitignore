@@ -51,3 +51,5 @@ include.txt
 
 kick.wav
 !*.go
+
+samples/afr-*-20*
