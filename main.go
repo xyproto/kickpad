@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	versionString   = "Kickpad 1.1.0"
+	versionString   = "Kickpad 1.2.0"
 	buttonSize      = 100
 	numPads         = 16
 	maxGenerations  = 1000
@@ -62,6 +62,10 @@ const (
 )
 
 var (
+	// List of available sound types for the drop-down
+	soundTypes                   = []string{"kick", "clap", "snare", "closed_hh", "open_hh", "rimshot", "tom", "percussion", "ride", "crash", "bass", "xylophone", "lead"}
+	soundTypeSelectedIndex int32 = 0 // Index for the selected sound type
+
 	activePadIndex  int
 	pads            [numPads]*synth.Settings
 	loadedWaveform  []float64                 // Loaded .wav file waveform data
@@ -134,7 +138,8 @@ func playWavFile() error {
 
 // compareWaveformsSafe compares two waveforms using both time-domain and frequency-domain MSE
 func compareWaveformsSafe(individual *synth.Settings) float64 {
-	generatedWaveform, err := individual.GenerateKickWaveform()
+	generatedWaveform, err := individual.Generate(soundTypes[soundTypeSelectedIndex])
+
 	if err != nil {
 		return math.Inf(1) // Assign worst fitness if generation fails
 	}
@@ -559,9 +564,9 @@ func createPadWidget(cfg *synth.Settings, padLabel string, padIndex int) g.Widge
 					activePadIndex = padIndex
 					// Then generate and play the sample (even during training)
 					go func() {
-						err := synth.FFPlayKick(pads[activePadIndex])
+						err := synth.FFGeneratePlay(soundTypes[soundTypeSelectedIndex], pads[activePadIndex])
 						if err != nil {
-							statusMessage = fmt.Sprintf("Error: Failed to play kick: %v", err)
+							statusMessage = fmt.Sprintf("Error: Failed to generate and play sound: %v", err)
 						}
 					}()
 				})),
@@ -575,11 +580,11 @@ func createPadWidget(cfg *synth.Settings, padLabel string, padIndex int) g.Widge
 			g.Button("Save").OnClick(func() {
 				pads[padIndex].SampleRate = sampleRate
 				pads[padIndex].BitDepth = bitDepth
-				fileName, err := pads[padIndex].SaveKickTo(".") // Save the active pad's settings to a .wav file
+				fileName, err := pads[padIndex].GenerateAndSaveTo(soundTypes[soundTypeSelectedIndex], ".") // Save the active pad's settings to a .wav file
 				if err != nil {
-					statusMessage = fmt.Sprintf("Error: Failed to save kick to %s", ".")
+					statusMessage = fmt.Sprintf("Error: Failed to generate and save sound to %s", ".")
 				} else {
-					statusMessage = fmt.Sprintf("Kick saved to %s", fileName)
+					statusMessage = fmt.Sprintf("sound saved to %s", fileName)
 				}
 				g.Update() // Update the status message
 			}),
@@ -587,7 +592,6 @@ func createPadWidget(cfg *synth.Settings, padLabel string, padIndex int) g.Widge
 	)
 }
 
-// Function to create sliders and dropdown for viewing and editing the selected pad's settings
 func createSlidersForSelectedPad() g.Widget {
 	cfg := pads[activePadIndex]
 
@@ -606,8 +610,15 @@ func createSlidersForSelectedPad() g.Widget {
 	waveformSelectedIndex = int32(cfg.WaveformType)
 
 	return g.Column(
-		g.Label(fmt.Sprintf("Kick Pad %d settings:", activePadIndex+1)),
+		g.Label(fmt.Sprintf("Pad %d settings:", activePadIndex+1)),
 		g.Dummy(30, 0),
+		// Dropdown for sound type selection
+		g.Row(
+			g.Label("Sound Type"),
+			g.Combo("Sound Type", soundTypes[soundTypeSelectedIndex], soundTypes, &soundTypeSelectedIndex).Size(150),
+		),
+		g.Dummy(30, 0),
+		// Sliders for sound parameters
 		g.Row(
 			g.Label("Waveform"),
 			g.Combo("Waveform", waveforms[waveformSelectedIndex], waveforms, &waveformSelectedIndex).Size(150).OnChange(func() {
@@ -669,9 +680,9 @@ func createSlidersForSelectedPad() g.Widget {
 		g.Row(
 			g.Button("Play").OnClick(func() {
 				statusMessage = ""
-				err := synth.FFPlayKick(pads[activePadIndex])
+				err := synth.FFGeneratePlay(soundTypes[soundTypeSelectedIndex], pads[activePadIndex])
 				if err != nil {
-					statusMessage = "Error: Failed to play kick."
+					statusMessage = fmt.Sprintf("Error: Failed to play %s.", soundTypes[soundTypeSelectedIndex])
 				}
 				g.Update() // Update the status message
 			}),
@@ -682,11 +693,11 @@ func createSlidersForSelectedPad() g.Widget {
 			g.Button("Save").OnClick(func() {
 				pads[activePadIndex].SampleRate = sampleRate
 				pads[activePadIndex].BitDepth = bitDepth
-				fileName, err := pads[activePadIndex].SaveKickTo(".")
+				fileName, err := pads[activePadIndex].GenerateAndSaveTo(soundTypes[soundTypeSelectedIndex], ".")
 				if err != nil {
-					statusMessage = fmt.Sprintf("Error: Failed to save kick to %s", fileName)
+					statusMessage = fmt.Sprintf("Error: Failed to save %s to %s", soundTypes[soundTypeSelectedIndex], fileName)
 				} else {
-					statusMessage = fmt.Sprintf("Kick saved to %s", fileName)
+					statusMessage = fmt.Sprintf("%s saved to %s", soundTypes[soundTypeSelectedIndex], fileName)
 				}
 				g.Update() // Update the status message
 			}),
@@ -738,7 +749,7 @@ func loop() {
 	)
 }
 
-// Conditionally generate the "Find kick similar to WAV" and "Stop training" buttons
+// Conditionally generate the "Find sound similar to WAV" and "Stop training" buttons
 func generateTrainingButtons() g.Widget {
 	if len(loadedWaveform) > 0 {
 		if trainingOngoing {
@@ -758,7 +769,7 @@ func generateTrainingButtons() g.Widget {
 			)
 		}
 		return g.Row(
-			g.Button("Find kick similar to WAV").OnClick(func() {
+			g.Button("Find sound similar to WAV").OnClick(func() {
 				if !trainingOngoing {
 					cancelTraining = make(chan bool)
 					trainingOngoing = true
