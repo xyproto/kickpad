@@ -37,40 +37,18 @@ Note that these instructions needs more testing. Please create an issue or PR if
 
 ### Arch Linux
 
-#### Quick Version
+Kickpad is available in AUR and can be installed with ie. yay:
 
-    go install github.com/xyproto/kickpad@latest
-
-#### Extended Version
-
-Install the required dependencies, download the sources, build the executable and add ~/go/bin to $PATH in bash:
-
-    sudo pacman -S go glfw ffmpeg
-    go install github.com/xyproto/kickpad@latest
-    echo 'export PATH="$HOME/go/bin:$PATH"' >> ~/.bashrc
-
-Then `exec` bash to get the updated PATH:
-
-    exec $SHELL
-
-Then just run:
-
-    kickpad
+    yay -S kickpad
 
 ### macOS
-
-#### Quick Version
-
-    go install github.com/xyproto/kickpad@latest
-
-#### Extended Version
 
 Open a terminal:
 
 * Press `Cmd + Space` to open Spotlight.
-* Type in "Terminal" and press `Return`.
+* Type in "terminal" and press `Return`.
 
-Install Homebrew:
+Install Homebrew if you haven't already:
 
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
@@ -83,13 +61,9 @@ Install Kickpad:
     go install github.com/xyproto/kickpad@latest
     sudo install -m755 go/bin/kickpad /usr/local/bin/kickpad
 
-Run Kickpad:
-
-    kickpad
-
-When running kickpad the next time, opening a terminal and typing in `kickpad` is enough.
-
 ## Running
+
+Open a terminal and type in:
 
     kickpad
 
