@@ -5,3 +5,4 @@
 - [ ] Also randomize instrument types.
 - [ ] Also mutate instrument types when the GA is running.
 - [ ] Add a "Default" button that will use good default settings, based on the selected instrument type.
+- [ ] Recreate the UI with Fyne instead of giu, to aim for a desktop + mobile release.
