@@ -29,7 +29,6 @@ Kick drum audio sample generator. Note that this entire program is a bit experim
 
 * `ffplay`
 * `glfw`
-* `sdl2` + `sdl2_mixer`
 * `go` (1.23 or later)
 
 ## Installation
@@ -46,7 +45,7 @@ Note that these instructions needs more testing. Please create an issue or PR if
 
 Install the required dependencies, download the sources, build the executable and add ~/go/bin to $PATH in bash:
 
-    sudo pacman -S go sdl2 glfw sdl2_mixer ffmpeg
+    sudo pacman -S go glfw ffmpeg
     go install github.com/xyproto/kickpad@latest
     echo 'export PATH="$HOME/go/bin:$PATH"' >> ~/.bashrc
 
@@ -77,7 +76,7 @@ Install Homebrew:
 
 Install the required dependencies:
 
-    brew install ffmpeg sdl2 sdl2_mixer go glfw
+    brew install ffmpeg go glfw
 
 Install Kickpad:
 
@@ -96,6 +95,6 @@ When running kickpad the next time, opening a terminal and typing in `kickpad` i
 
 ## General info
 
-* Version: 1.1.0
+* Version: 1.2.0
 * Author: Alexander F. Rødseth &lt;xyproto@archlinux.org&gt;
 * License: MIT
