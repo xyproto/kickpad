@@ -95,6 +95,6 @@ When running kickpad the next time, opening a terminal and typing in `kickpad` i
 
 ## General info
 
-* Version: 1.2.1
+* Version: 1.2.2
 * Author: Alexander F. Rødseth &lt;xyproto@archlinux.org&gt;
 * License: MIT
