@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	versionString   = "Kickpad 1.2.0"
+	versionString   = "Kickpad 1.2.1"
 	buttonSize      = 100
 	numPads         = 16
 	maxGenerations  = 1000
