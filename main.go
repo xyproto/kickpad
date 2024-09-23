@@ -19,6 +19,8 @@ import (
 const (
 	versionString = "Kickpad 1.2.3"
 
+	channels = 2
+
 	buttonSize      = 100
 	numPads         = 16
 	maxGenerations  = 1000
@@ -259,7 +261,7 @@ func compareWaveforms(waveform1, waveform2 []float64) float64 {
 // Randomize all pads (instead of mutating)
 func randomizeAllPads() {
 	for i := 0; i < numPads; i++ {
-		pads[i] = synth.NewRandom(nil, sampleRate, bitDepth)
+		pads[i] = synth.NewRandom(nil, sampleRate, bitDepth, channels)
 	}
 }
 
@@ -351,7 +353,7 @@ func optimizeSettings(allWaveforms bool) {
 	// Initialize population
 	population := make([]*synth.Settings, populationSize)
 	for i := 0; i < populationSize; i++ {
-		population[i] = synth.NewRandom(nil, sampleRate, bitDepth)
+		population[i] = synth.NewRandom(nil, sampleRate, bitDepth, channels)
 		// Ensure WaveformType is within the desired range
 		if !allWaveforms {
 			population[i].WaveformType = rand.Intn(2) // Sine or Triangle
@@ -793,7 +795,7 @@ func generateTrainingButtons() g.Widget {
 func main() {
 	// Initialize random settings for the 16 pads using synth.NewRandom()
 	for i := 0; i < numPads; i++ {
-		pads[i] = synth.NewRandom(nil, sampleRate, bitDepth)
+		pads[i] = synth.NewRandom(nil, sampleRate, bitDepth, channels)
 	}
 
 	// Set the first pad as selected
