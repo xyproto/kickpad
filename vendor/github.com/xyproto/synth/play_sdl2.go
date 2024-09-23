@@ -43,7 +43,7 @@ func (player *Player) GeneratePlay(t string, cfg *Settings) error {
 	if err != nil {
 		return err
 	}
-	return player.PlayWaveform(samples, cfg.SampleRate, cfg.BitDepth)
+	return player.PlayWaveform(samples, cfg.SampleRate, cfg.BitDepth, cfg.Channels)
 }
 
 // PlayWav plays a WAV file using SDL2 and SDL_mixer
@@ -72,13 +72,13 @@ func (player *Player) PlayWav(filePath string) error {
 	return nil
 }
 
-func (player *Player) PlayWaveform(samples []float64, sampleRate, bitDepth int) error {
+func (player *Player) PlayWaveform(samples []float64, sampleRate, bitDepth, channels int) error {
 	if !player.Initialized {
 		return errors.New("SDL2 Audio needs to be initialized first")
 	}
 	var desired, obtained sdl.AudioSpec
 	desired.Freq = int32(sampleRate)
-	desired.Channels = 1
+	desired.Channels = uint8(channels)
 	desired.Samples = 4096
 	switch bitDepth {
 	case 8:

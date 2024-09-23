@@ -31,9 +31,14 @@ const (
 
 // Settings holds the configuration for generating a sound
 type Settings struct {
+	SampleRate int
+	BitDepth   int
+	Channels   int
+
+	Output io.WriteSeeker
+
 	StartFreq                  float64
 	EndFreq                    float64
-	SampleRate                 int
 	Duration                   float64
 	WaveformType               int
 	Attack                     float64
@@ -47,12 +52,10 @@ type Settings struct {
 	PitchDecay                 float64
 	NoiseType                  int
 	NoiseAmount                float64
-	Output                     io.WriteSeeker
 	NumOscillators             int
 	OscillatorLevels           []float64
 	SaturatorAmount            float64
 	FilterBands                []float64
-	BitDepth                   int
 	FadeDuration               float64
 	SmoothFrequencyTransitions bool
 }

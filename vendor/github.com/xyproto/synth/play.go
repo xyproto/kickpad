@@ -42,7 +42,7 @@ func (player *Player) PlayWav(filePath string) error {
 }
 
 // PlayWaveform plays raw waveform samples using SDL2
-func (player *Player) PlayWaveform(samples []float64, sampleRate, bitDepth int) error {
+func (player *Player) PlayWaveform(samples []float64, sampleRate, bitDepth, channels int) error {
 	if !player.Initialized {
 		return errors.New("ffplay culd not be found")
 	}
@@ -51,7 +51,7 @@ func (player *Player) PlayWaveform(samples []float64, sampleRate, bitDepth int) 
 		return fmt.Errorf("error creating temporary wav file: %v", err)
 	}
 	defer os.Remove(tmpFile.Name())
-	if err := SaveToWav(tmpFile, samples, sampleRate, bitDepth); err != nil {
+	if err := SaveToWav(tmpFile, samples, sampleRate, bitDepth, channels); err != nil {
 		return fmt.Errorf("error saving wav file: %v", err)
 	}
 	err = FFPlayWavWithSampleRate(tmpFile.Name(), sampleRate)

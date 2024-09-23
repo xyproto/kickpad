@@ -11,14 +11,15 @@ import (
 	"github.com/go-audio/wav"
 )
 
-func SaveToWav(w io.WriteSeeker, samples []float64, sampleRate, bitDepth int) error {
+func SaveToWav(w io.WriteSeeker, samples []float64, sampleRate, bitDepth, channels int) error {
 	if len(samples) == 0 {
 		return fmt.Errorf("cannot save empty waveform: no samples provided")
 	}
 	if bitDepth == 0 {
 		return fmt.Errorf("bitdepth should be 8, 16, 24 or 32, not 0")
 	}
-	enc := wav.NewEncoder(w, sampleRate, bitDepth, 1, 1) // Mono channel
+	const audioFormat = 1
+	enc := wav.NewEncoder(w, sampleRate, bitDepth, channels, audioFormat)
 	buf := &audio.IntBuffer{
 		Format: &audio.Format{SampleRate: sampleRate, NumChannels: 1},
 		Data:   make([]int, len(samples)),
@@ -123,7 +124,7 @@ func (cfg *Settings) GenerateAndSaveTo(t, directory string) (string, error) {
 		return "", err
 	}
 	// Save the generated samples to the WAV file
-	err = SaveToWav(file, samples, cfg.SampleRate, cfg.BitDepth)
+	err = SaveToWav(file, samples, cfg.SampleRate, cfg.BitDepth, cfg.Channels)
 	if err != nil {
 		return "", fmt.Errorf("error saving to wav file: %v", err)
 	}

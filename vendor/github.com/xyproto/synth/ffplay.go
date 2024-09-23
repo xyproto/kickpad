@@ -41,7 +41,7 @@ func FFGeneratePlay(t string, cfg *Settings) error {
 	}
 	defer os.Remove(tmpFile.Name()) // Ensure the file is removed after playing
 	// Save the waveform to the temporary file using SaveToWav
-	if err := SaveToWav(tmpFile, samples, cfg.SampleRate, cfg.BitDepth); err != nil {
+	if err := SaveToWav(tmpFile, samples, cfg.SampleRate, cfg.BitDepth, cfg.Channels); err != nil {
 		return fmt.Errorf("error saving wav file: %v", err)
 	}
 	// Play the temporary wav file using ffplay

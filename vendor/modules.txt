@@ -108,7 +108,7 @@ github.com/xyproto/env/v2
 # github.com/xyproto/files v1.7.0
 ## explicit; go 1.19
 github.com/xyproto/files
-# github.com/xyproto/synth v1.5.3
+# github.com/xyproto/synth v1.6.0
 ## explicit; go 1.23.1
 github.com/xyproto/synth
 # golang.design/x/hotkey v0.4.1

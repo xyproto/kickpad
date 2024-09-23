@@ -7,15 +7,17 @@ import (
 )
 
 // NewSettings creates a new Settings instance with default values for a kick drum
-func NewSettings(startFreq, endFreq float64, sampleRate int, duration float64, bitDepth int, output io.WriteSeeker) (*Settings, error) {
-	if sampleRate <= 0 || duration <= 0 {
-		return nil, errors.New("invalid sample rate or duration")
+func NewSettings(output io.WriteSeeker, startFreq, endFreq, duration float64, sampleRate, bitDepth, channels int) (*Settings, error) {
+	if sampleRate <= 0 || duration <= 0 || channels <= 0 {
+		return nil, errors.New("invalid sample rate, duration or channels")
 	}
-
 	return &Settings{
-		StartFreq:                  startFreq, // Starting frequency (Hz)
-		EndFreq:                    endFreq,   // Ending frequency (Hz)
 		SampleRate:                 sampleRate,
+		BitDepth:                   bitDepth, // Audio bit depth (16 or 24 bits)
+		Channels:                   channels,
+		Output:                     output,                           // Output writer
+		StartFreq:                  startFreq,                        // Starting frequency (Hz)
+		EndFreq:                    endFreq,                          // Ending frequency (Hz)
 		Duration:                   duration,                         // Duration in seconds
 		WaveformType:               WaveSine,                         // Default waveform type
 		Attack:                     0.005,                            // Attack time in seconds
@@ -28,20 +30,19 @@ func NewSettings(startFreq, endFreq float64, sampleRate int, duration float64, b
 		PitchDecay:                 0.4,                              // Pitch envelope decay time
 		NoiseType:                  NoiseNone,                        // Default to no noise
 		NoiseAmount:                0.0,                              // Amount of noise to mix in
-		Output:                     output,                           // Output writer
 		NumOscillators:             1,                                // Default to 1 oscillator
 		OscillatorLevels:           []float64{1.0},                   // Default oscillator level
 		SaturatorAmount:            0.3,                              // Saturation amount
 		FilterBands:                []float64{200.0, 1000.0, 3000.0}, // Multi-band filter frequencies
-		BitDepth:                   bitDepth,                         // Audio bit depth (16 or 24 bits)
 		FadeDuration:               0.01,                             // Fade in/out duration in seconds
 		SmoothFrequencyTransitions: true,                             // Enable smooth frequency transitions by default
+
 	}, nil
 }
 
 // NewRandom generates random kick drum settings
-func NewRandom(output io.WriteSeeker, sampleRate, bitDepth int) *Settings {
-	cfg, _ := NewSettings(55.0, 30.0, sampleRate, 1.0, bitDepth, output)
+func NewRandom(output io.WriteSeeker, sampleRate, bitDepth, channels int) *Settings {
+	cfg, _ := NewSettings(output, 55.0, 30.0, 1.0, sampleRate, bitDepth, channels)
 	cfg.Attack = rand.Float64() * 0.02
 	cfg.Decay = 0.2 + rand.Float64()*0.8
 	cfg.Sustain = rand.Float64() * 0.5
@@ -61,8 +62,8 @@ func NewRandom(output io.WriteSeeker, sampleRate, bitDepth int) *Settings {
 }
 
 // NewExperimental creates an experimental kick drum sound
-func NewExperimental(sampleRate int, duration float64, bitDepth int, output io.WriteSeeker) (*Settings, error) {
-	cfg, err := NewSettings(80.0, 20.0, sampleRate, duration, bitDepth, output)
+func NewExperimental(output io.WriteSeeker, duration float64, sampleRate, bitDepth, channels int) (*Settings, error) {
+	cfg, err := NewSettings(output, 80.0, 20.0, duration, sampleRate, bitDepth, channels)
 	if err != nil {
 		return nil, err
 	}
@@ -81,8 +82,8 @@ func NewExperimental(sampleRate int, duration float64, bitDepth int, output io.W
 }
 
 // NewLinnDrum creates a LinnDrum-style kick drum sound
-func NewLinnDrum(sampleRate int, duration float64, bitDepth int, output io.WriteSeeker) (*Settings, error) {
-	cfg, err := NewSettings(60.0, 40.0, sampleRate, duration, bitDepth, output)
+func NewLinnDrum(output io.WriteSeeker, duration float64, sampleRate, bitDepth, channels int) (*Settings, error) {
+	cfg, err := NewSettings(output, 60.0, 40.0, duration, sampleRate, bitDepth, channels)
 	if err != nil {
 		return nil, err
 	}
@@ -102,8 +103,8 @@ func NewLinnDrum(sampleRate int, duration float64, bitDepth int, output io.Write
 }
 
 // NewDeepHouse creates a Deep House kick drum
-func NewDeepHouse(sampleRate int, duration float64, bitDepth int, output io.WriteSeeker) (*Settings, error) {
-	cfg, err := NewSettings(45.0, 25.0, sampleRate, duration, bitDepth, output)
+func NewDeepHouse(output io.WriteSeeker, duration float64, sampleRate, bitDepth, channels int) (*Settings, error) {
+	cfg, err := NewSettings(output, 45.0, 25.0, duration, sampleRate, bitDepth, channels)
 	if err != nil {
 		return nil, err
 	}
@@ -123,8 +124,8 @@ func NewDeepHouse(sampleRate int, duration float64, bitDepth int, output io.Writ
 }
 
 // New606 creates a 606-style kick drum
-func New606(sampleRate int, duration float64, bitDepth int, output io.WriteSeeker) (*Settings, error) {
-	cfg, err := NewSettings(65.0, 45.0, sampleRate, duration, bitDepth, output)
+func New606(output io.WriteSeeker, duration float64, sampleRate, bitDepth, channels int) (*Settings, error) {
+	cfg, err := NewSettings(output, 65.0, 45.0, duration, sampleRate, bitDepth, channels)
 	if err != nil {
 		return nil, err
 	}
@@ -144,8 +145,8 @@ func New606(sampleRate int, duration float64, bitDepth int, output io.WriteSeeke
 }
 
 // New707 creates a 707-style kick drum
-func New707(sampleRate int, duration float64, bitDepth int, output io.WriteSeeker) (*Settings, error) {
-	cfg, err := NewSettings(60.0, 40.0, sampleRate, duration, bitDepth, output)
+func New707(output io.WriteSeeker, duration float64, sampleRate, bitDepth, channels int) (*Settings, error) {
+	cfg, err := NewSettings(output, 60.0, 40.0, duration, sampleRate, bitDepth, channels)
 	if err != nil {
 		return nil, err
 	}
@@ -165,8 +166,8 @@ func New707(sampleRate int, duration float64, bitDepth int, output io.WriteSeeke
 }
 
 // New808 creates an 808-style kick drum
-func New808(sampleRate int, duration float64, bitDepth int, output io.WriteSeeker) (*Settings, error) {
-	cfg, err := NewSettings(55.0, 30.0, sampleRate, duration, bitDepth, output)
+func New808(output io.WriteSeeker, duration float64, sampleRate, bitDepth, channels int) (*Settings, error) {
+	cfg, err := NewSettings(output, 55.0, 30.0, duration, sampleRate, bitDepth, channels)
 	if err != nil {
 		return nil, err
 	}
@@ -186,8 +187,8 @@ func New808(sampleRate int, duration float64, bitDepth int, output io.WriteSeeke
 }
 
 // New909 creates a 909-style kick drum
-func New909(sampleRate int, duration float64, bitDepth int, output io.WriteSeeker) (*Settings, error) {
-	cfg, err := NewSettings(70.0, 50.0, sampleRate, duration, bitDepth, output)
+func New909(output io.WriteSeeker, duration float64, sampleRate, bitDepth, channels int) (*Settings, error) {
+	cfg, err := NewSettings(output, 70.0, 50.0, duration, sampleRate, bitDepth, channels)
 	if err != nil {
 		return nil, err
 	}
