@@ -27,7 +27,7 @@ Kick drum audio sample generator. Note that this entire program is a bit experim
 
 ## Requirements
 
-* `ffplay`
+* `sdl2`
 * `glfw`
 * `go` (1.23 or later)
 
@@ -52,7 +52,7 @@ Install Homebrew if you haven't already:
 
 Install the required dependencies:
 
-    brew install ffmpeg go glfw
+    brew install sdl2 sdl2_mix go glfw
 
 Install Kickpad:
 
@@ -61,8 +61,6 @@ Install Kickpad:
 
 Note that these instructions needs more testing. Please create an issue or PR if they need an improvement.
 
-* Build with `go build -tags enable_cimgui_sdl2,exclude_cimgui_glfw,sdl2` to depend on SDL2.
-* Build with `go build -tags enable_cimgui_glfw,exclude_cimgui_sdl` to depend on GLFW and the `ffplay` command.
 * Building with `go -mod=mod` might be needed.
 
 ## Running
@@ -73,6 +71,6 @@ Open a terminal and type in:
 
 ## General info
 
-* Version: 1.2.3
+* Version: 1.4.0
 * Author: Alexander F. Rødseth &lt;xyproto@archlinux.org&gt;
 * License: MIT

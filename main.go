@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"image/color"
+	"log"
 	"math"
 	"math/cmplx"
 	"math/rand"
@@ -19,7 +20,7 @@ import (
 )
 
 const (
-	versionString = "Kickpad 1.2.3"
+	versionString = "Kickpad 1.4.0"
 
 	channels = 2
 
@@ -88,20 +89,23 @@ var (
 	waveformSelectedIndex int32
 	sampleRateIndex       int32
 	bitDepthSelected      bool
+
+	player   *playsample.Player // Global player instance
+	muPlayer sync.Mutex         // Mutex to ensure thread safety
 )
 
 // Load a .wav file and store the waveform for comparison
 func loadWavFile() error {
 	workingDir, err := os.Getwd()
 	if err != nil {
-		statusMessage = "Error: Could not get working directory"
+		setStatusMessage("Error: Could not get working directory")
 		return err
 	}
 
 	filePath := filepath.Join(workingDir, wavFilePath)
 	file, err := os.Open(filePath)
 	if err != nil {
-		statusMessage = fmt.Sprintf("Error: Failed to open .wav file %s", filePath)
+		setStatusMessage(fmt.Sprintf("Error: Failed to open .wav file %s", filePath))
 		return err
 	}
 	defer file.Close()
@@ -109,7 +113,7 @@ func loadWavFile() error {
 	decoder := wav.NewDecoder(file)
 	buffer, err := decoder.FullPCMBuffer()
 	if err != nil {
-		statusMessage = fmt.Sprintf("Error: Failed to decode .wav file %s", filePath)
+		setStatusMessage(fmt.Sprintf("Error: Failed to decode .wav file %s", filePath))
 		return err
 	}
 
@@ -118,7 +122,7 @@ func loadWavFile() error {
 		loadedWaveform[i] = float64(sample) / math.MaxInt16 // Normalize to [-1, 1] range
 	}
 
-	statusMessage = fmt.Sprintf("Loaded .wav file: %s", filePath)
+	setStatusMessage(fmt.Sprintf("Loaded .wav file: %s", filePath))
 	return nil
 }
 
@@ -126,21 +130,24 @@ func loadWavFile() error {
 func playWavFile() error {
 	workingDir, err := os.Getwd()
 	if err != nil {
-		statusMessage = "Error: Could not get working directory"
+		setStatusMessage("Error: Could not get working directory")
 		return err
 	}
 
 	filePath := filepath.Join(workingDir, wavFilePath)
 
-	player := playsample.NewPlayer()
-	defer player.Close()
+	muPlayer.Lock()         // Lock the mutex before accessing the player
+	defer muPlayer.Unlock() // Ensure the mutex is unlocked after the function completes
+	if player == nil || !player.Initialized {
+		return errors.New("Player is not initialized")
+	}
 
 	if err := player.PlayWav(filePath); err != nil {
-		statusMessage = fmt.Sprintf("Error: Failed to play .wav file %s", filePath)
+		setStatusMessage(fmt.Sprintf("Error: Failed to play .wav file %s", filePath))
 		return err
 	}
 
-	statusMessage = fmt.Sprintf("Playing .wav file: %s", filePath)
+	setStatusMessage(fmt.Sprintf("Playing .wav file: %s", filePath))
 	return nil
 }
 
@@ -342,6 +349,8 @@ func singlePointCrossover(parent1, parent2 *synth.Settings) (*synth.Settings, *s
 }
 
 func setStatusMessage(msg string) {
+	mu.Lock()
+	defer mu.Unlock()
 	statusMessage = msg
 }
 
@@ -567,15 +576,16 @@ func createPadWidget(cfg *synth.Settings, padLabel string, padIndex int) g.Widge
 				g.Button(padLabel).Size(buttonSize, buttonSize).OnClick(func() {
 					// Set this pad as active and clear status message
 					activePadIndex = padIndex
-					statusMessage = ""
+					setStatusMessage("")
 
 					// Generate and play the sound when the pad is clicked
 					go func() {
 						if err := GeneratePlay(soundTypes[soundTypeSelectedIndex], pads[activePadIndex]); err != nil {
-							statusMessage = fmt.Sprintf("Error: Failed to play sound: %v", err)
+							setStatusMessage(fmt.Sprintf("Error: Failed to play sound: %v", err))
 						} else {
-							statusMessage = fmt.Sprintf("Playing sound from %s", padLabel)
+							setStatusMessage(fmt.Sprintf("Playing sound from %s", padLabel))
 						}
+						g.Update()
 					}()
 				}),
 			),
@@ -589,11 +599,11 @@ func createPadWidget(cfg *synth.Settings, padLabel string, padIndex int) g.Widge
 				pads[padIndex].BitDepth = bitDepth
 				fileName, err := pads[padIndex].GenerateAndSaveTo(soundTypes[soundTypeSelectedIndex], ".")
 				if err != nil {
-					statusMessage = fmt.Sprintf("Error: Failed to save %s to %s", soundTypes[soundTypeSelectedIndex], fileName)
+					setStatusMessage(fmt.Sprintf("Error: Failed to save %s to %s", soundTypes[soundTypeSelectedIndex], fileName))
 				} else {
-					statusMessage = fmt.Sprintf("%s saved to %s", soundTypes[soundTypeSelectedIndex], fileName)
+					setStatusMessage(fmt.Sprintf("%s saved to %s", soundTypes[soundTypeSelectedIndex], fileName))
 				}
-				g.Update() // Update status message
+				g.Update()
 			}),
 		),
 	)
@@ -686,10 +696,10 @@ func createSlidersForSelectedPad() g.Widget {
 		g.Dummy(30, 0),
 		g.Row(
 			g.Button("Play").OnClick(func() {
-				statusMessage = ""
+				setStatusMessage("")
 				err := GeneratePlay(soundTypes[soundTypeSelectedIndex], pads[activePadIndex])
 				if err != nil {
-					statusMessage = fmt.Sprintf("Error: Failed to play %s.", soundTypes[soundTypeSelectedIndex])
+					setStatusMessage(fmt.Sprintf("Error: Failed to play %s.", soundTypes[soundTypeSelectedIndex]))
 				}
 				g.Update() // Update the status message
 			}),
@@ -702,9 +712,9 @@ func createSlidersForSelectedPad() g.Widget {
 				pads[activePadIndex].BitDepth = bitDepth
 				fileName, err := pads[activePadIndex].GenerateAndSaveTo(soundTypes[soundTypeSelectedIndex], ".")
 				if err != nil {
-					statusMessage = fmt.Sprintf("Error: Failed to save %s to %s", soundTypes[soundTypeSelectedIndex], fileName)
+					setStatusMessage(fmt.Sprintf("Error: Failed to save %s to %s", soundTypes[soundTypeSelectedIndex], fileName))
 				} else {
-					statusMessage = fmt.Sprintf("%s saved to %s", soundTypes[soundTypeSelectedIndex], fileName)
+					setStatusMessage(fmt.Sprintf("%s saved to %s", soundTypes[soundTypeSelectedIndex], fileName))
 				}
 				g.Update() // Update the status message
 			}),
@@ -738,7 +748,7 @@ func loop() {
 					g.Button("Load WAV").OnClick(func() {
 						err := loadWavFile()
 						if err != nil {
-							statusMessage = "Failed to load .wav file"
+							setStatusMessage("Failed to load .wav file")
 						}
 					}),
 				),
@@ -769,7 +779,7 @@ func generateTrainingButtons() g.Widget {
 				g.Button("Play WAV").OnClick(func() {
 					err := playWavFile()
 					if err != nil {
-						statusMessage = "Error: Failed to play WAV"
+						setStatusMessage("Error: Failed to play WAV")
 					}
 					g.Update() // Update status message for WAV playback
 				}),
@@ -787,7 +797,7 @@ func generateTrainingButtons() g.Widget {
 			g.Button("Play WAV").OnClick(func() {
 				err := playWavFile()
 				if err != nil {
-					statusMessage = "Error: Failed to play WAV"
+					setStatusMessage("Error: Failed to play WAV")
 				}
 				g.Update() // Update status message for WAV playback
 			}),
@@ -797,6 +807,13 @@ func generateTrainingButtons() g.Widget {
 }
 
 func main() {
+	// Initialize the player
+	player = playsample.NewPlayer()
+	if !player.Initialized {
+		log.Fatalln("Error: Audio Player failed to initialize.")
+	}
+	defer player.Close() // Ensure the player is closed when the application exits
+
 	// Initialize random settings for the 16 pads using synth.NewRandom()
 	for i := 0; i < numPads; i++ {
 		pads[i] = synth.NewRandomKick(nil, sampleRate, bitDepth, channels)
@@ -812,11 +829,12 @@ func main() {
 
 // GeneratePlay generates and plays the current kick drum sound
 func GeneratePlay(t string, cfg *synth.Settings) error {
-	player := playsample.NewPlayer()
-	if !player.Initialized {
-		return errors.New("A Player needs to be initialized first")
+	muPlayer.Lock()         // Lock the mutex before accessing the player
+	defer muPlayer.Unlock() // Ensure the mutex is unlocked after the function completes
+	if player == nil || !player.Initialized {
+		return errors.New("Player is not initialized")
 	}
-	defer player.Close()
+
 	samples, err := cfg.Generate(t)
 	if err != nil {
 		return err
