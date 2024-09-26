@@ -6,14 +6,13 @@ require (
 	github.com/AllenDang/giu v0.8.1
 	github.com/go-audio/wav v1.1.0
 	github.com/mjibson/go-dsp v0.0.0-20180508042940-11479a337f12
+	github.com/xyproto/playsample v0.2.0
 	github.com/xyproto/synth v1.10.0
 )
 
 require (
 	github.com/AllenDang/cimgui-go v0.0.0-20240424153022-294abe7370df // indirect
 	github.com/AllenDang/go-findfont v0.0.0-20200702051237-9f180485aeb8 // indirect
-	github.com/ebitengine/oto/v3 v3.3.0 // indirect
-	github.com/ebitengine/purego v0.8.0 // indirect
 	github.com/faiface/mainthread v0.0.0-20171120011319-8b78f0a41ae3 // indirect
 	github.com/go-audio/audio v1.0.0 // indirect
 	github.com/go-audio/riff v1.0.0 // indirect
@@ -26,7 +25,6 @@ require (
 	github.com/xyproto/binary v1.3.3 // indirect
 	github.com/xyproto/env/v2 v2.5.0 // indirect
 	github.com/xyproto/files v1.7.0 // indirect
-	github.com/xyproto/playsample v0.2.0 // indirect
 	golang.design/x/hotkey v0.4.1 // indirect
 	golang.design/x/mainthread v0.3.0 // indirect
 	golang.org/x/image v0.18.0 // indirect
