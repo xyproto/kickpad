@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"image/color"
 	"math"
@@ -13,6 +14,7 @@ import (
 	g "github.com/AllenDang/giu"
 	"github.com/go-audio/wav"
 	"github.com/mjibson/go-dsp/fft"
+	"github.com/xyproto/playsample"
 	"github.com/xyproto/synth"
 )
 
@@ -130,7 +132,10 @@ func playWavFile() error {
 
 	filePath := filepath.Join(workingDir, wavFilePath)
 
-	if err := synth.FFPlayWav(filePath); err != nil {
+	player := playsample.NewPlayer()
+	defer player.Close()
+
+	if err := player.PlayWav(filePath); err != nil {
 		statusMessage = fmt.Sprintf("Error: Failed to play .wav file %s", filePath)
 		return err
 	}
@@ -261,7 +266,7 @@ func compareWaveforms(waveform1, waveform2 []float64) float64 {
 // Randomize all pads (instead of mutating)
 func randomizeAllPads() {
 	for i := 0; i < numPads; i++ {
-		pads[i] = synth.NewRandom(nil, sampleRate, bitDepth, channels)
+		pads[i] = synth.NewRandomKick(nil, sampleRate, bitDepth, channels)
 	}
 }
 
@@ -353,7 +358,7 @@ func optimizeSettings(allWaveforms bool) {
 	// Initialize population
 	population := make([]*synth.Settings, populationSize)
 	for i := 0; i < populationSize; i++ {
-		population[i] = synth.NewRandom(nil, sampleRate, bitDepth, channels)
+		population[i] = synth.NewRandomKick(nil, sampleRate, bitDepth, channels)
 		// Ensure WaveformType is within the desired range
 		if !allWaveforms {
 			population[i].WaveformType = rand.Intn(2) // Sine or Triangle
@@ -541,55 +546,54 @@ func clamp(value, min, max float64) float64 {
 	return value
 }
 
-// UI functions and pad widget handling
+// This function is tied to the pad's "Play" button
 func createPadWidget(cfg *synth.Settings, padLabel string, padIndex int) g.Widget {
 	buttonColor := cfg.Color()
 	padBorderColor := color.RGBA{0x0, 0x0, 0x0, 0xff} // black
 	padTextColor := color.RGBA{0x0, 0x0, 0x0, 0xff}   // black
 
 	luminance := 0.299*float64(buttonColor.R) + 0.587*float64(buttonColor.G) + 0.114*float64(buttonColor.B)
-
 	if luminance < 128 { // dark background color
 		padTextColor = color.RGBA{0xff, 0xff, 0xff, 0xff} // white
 	}
 
 	if padIndex == activePadIndex {
-		padBorderColor = color.RGBA{0xff, 0x0, 0x0, 0xff} // red
+		padBorderColor = color.RGBA{0xff, 0x0, 0x0, 0xff} // red for active pad
 	}
 
 	return g.Style().SetColor(g.StyleColorButton, buttonColor).To(
 		g.Column(
 			g.Style().SetColor(g.StyleColorText, padTextColor).SetColor(g.StyleColorBorder, padBorderColor).To(
 				g.Button(padLabel).Size(buttonSize, buttonSize).OnClick(func() {
-					// Clear the status message when a pad is clicked
-					statusMessage = ""
-					// Set the clicked pad as active
+					// Set this pad as active and clear status message
 					activePadIndex = padIndex
-					// Then generate and play the sample (even during training)
+					statusMessage = ""
+
+					// Generate and play the sound when the pad is clicked
 					go func() {
-						err := synth.FFGeneratePlay(soundTypes[soundTypeSelectedIndex], pads[activePadIndex])
-						if err != nil {
-							statusMessage = fmt.Sprintf("Error: Failed to generate and play sound: %v", err)
+						if err := GeneratePlay(soundTypes[soundTypeSelectedIndex], pads[activePadIndex]); err != nil {
+							statusMessage = fmt.Sprintf("Error: Failed to play sound: %v", err)
+						} else {
+							statusMessage = fmt.Sprintf("Playing sound from %s", padLabel)
 						}
 					}()
-				})),
-			// Mutate button: Mutate the selected pad and update the sliders
+				}),
+			),
 			g.Button("Mutate").OnClick(func() {
-				mutateSettings(pads[padIndex], true) // Mutate the selected pad and update settings
+				mutateSettings(pads[padIndex], true)
 				activePadIndex = padIndex
-				g.Update() // Update the sliders with mutated settings
+				g.Update() // Update UI with mutated settings
 			}),
-			// Save button: Save the current pad's configuration as a .wav file
 			g.Button("Save").OnClick(func() {
 				pads[padIndex].SampleRate = sampleRate
 				pads[padIndex].BitDepth = bitDepth
-				fileName, err := pads[padIndex].GenerateAndSaveTo(soundTypes[soundTypeSelectedIndex], ".") // Save the active pad's settings to a .wav file
+				fileName, err := pads[padIndex].GenerateAndSaveTo(soundTypes[soundTypeSelectedIndex], ".")
 				if err != nil {
-					statusMessage = fmt.Sprintf("Error: Failed to generate and save sound to %s", ".")
+					statusMessage = fmt.Sprintf("Error: Failed to save %s to %s", soundTypes[soundTypeSelectedIndex], fileName)
 				} else {
-					statusMessage = fmt.Sprintf("sound saved to %s", fileName)
+					statusMessage = fmt.Sprintf("%s saved to %s", soundTypes[soundTypeSelectedIndex], fileName)
 				}
-				g.Update() // Update the status message
+				g.Update() // Update status message
 			}),
 		),
 	)
@@ -683,7 +687,7 @@ func createSlidersForSelectedPad() g.Widget {
 		g.Row(
 			g.Button("Play").OnClick(func() {
 				statusMessage = ""
-				err := synth.FFGeneratePlay(soundTypes[soundTypeSelectedIndex], pads[activePadIndex])
+				err := GeneratePlay(soundTypes[soundTypeSelectedIndex], pads[activePadIndex])
 				if err != nil {
 					statusMessage = fmt.Sprintf("Error: Failed to play %s.", soundTypes[soundTypeSelectedIndex])
 				}
@@ -795,7 +799,7 @@ func generateTrainingButtons() g.Widget {
 func main() {
 	// Initialize random settings for the 16 pads using synth.NewRandom()
 	for i := 0; i < numPads; i++ {
-		pads[i] = synth.NewRandom(nil, sampleRate, bitDepth, channels)
+		pads[i] = synth.NewRandomKick(nil, sampleRate, bitDepth, channels)
 	}
 
 	// Set the first pad as selected
@@ -804,4 +808,18 @@ func main() {
 	// Adjust the window size to fit the grid, buttons, and sliders better
 	wnd := g.NewMasterWindow(versionString, 780, 660, g.MasterWindowFlagsNotResizable)
 	wnd.Run(loop)
+}
+
+// GeneratePlay generates and plays the current kick drum sound
+func GeneratePlay(t string, cfg *synth.Settings) error {
+	player := playsample.NewPlayer()
+	if !player.Initialized {
+		return errors.New("A Player needs to be initialized first")
+	}
+	defer player.Close()
+	samples, err := cfg.Generate(t)
+	if err != nil {
+		return err
+	}
+	return player.PlayWaveform(samples, cfg.SampleRate, cfg.BitDepth, cfg.Channels)
 }
