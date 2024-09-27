@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	versionString = "Kickpad 1.4.0"
+	versionString = "Kickpad 1.5.0"
 
 	channels = 2
 
