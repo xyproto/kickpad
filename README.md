@@ -9,7 +9,6 @@ Kick drum audio sample generator. Note that this entire program is a bit experim
 * Can be used for sound design of kick drum sounds, for trying different waveforms and selecting different parameters.
 * Can be used for loading an existing `.wav` audio sample and then evolve the settings so that they generate a kick drum sound that is as close as possible to the given `.wav`, using GA (genetic algorithms).
 * Can be used for setting up 16 different kick drum sound, which can then be played by clicking the pad buttons.
-* Uses `ffplay` for playing audio samples, for now, since I had issues combining SDL2 mixer package with the `giu` package. This may cause some clicks in the audio of more than one waveform is being played at once.
 
 ## What are all the buttons?
 
@@ -35,33 +34,13 @@ Kick drum audio sample generator. Note that this entire program is a bit experim
 
 ### Arch Linux
 
+Build (with SDL2):
+
+    go build -tags=enable_cimgui_sdl2 -mod=mod
+
 Kickpad is available in AUR and can be installed with ie. yay:
 
     yay -S kickpad
-
-### macOS
-
-Open a terminal:
-
-* Press `Cmd + Space` to open Spotlight.
-* Type in "terminal" and press `Return`.
-
-Install Homebrew if you haven't already:
-
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
-Install the required dependencies:
-
-    brew install sdl2 sdl2_mix go glfw
-
-Install Kickpad:
-
-    go install github.com/xyproto/kickpad@latest
-    sudo install -m755 go/bin/kickpad /usr/local/bin/kickpad
-
-Note that these instructions needs more testing. Please create an issue or PR if they need an improvement.
-
-* Building with `go -mod=mod` might be needed.
 
 ## Running
 
