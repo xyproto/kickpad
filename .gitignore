@@ -50,3 +50,6 @@ include.txt
 
 kickpad
 kick*.wav
+
+# imgui + sdl2 + glfw issues if dependencies are vendored
+vendor/
