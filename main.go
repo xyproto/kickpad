@@ -154,37 +154,33 @@ func playWavFile() error {
 // compareWaveformsSafe compares two waveforms using both time-domain and frequency-domain MSE
 func compareWaveformsSafe(individual *synth.Settings) float64 {
 	generatedWaveform, err := individual.Generate(soundTypes[soundTypeSelectedIndex])
-
 	if err != nil {
 		return math.Inf(1) // Assign worst fitness if generation fails
 	}
 
-	// Ensure both waveforms have the same sample rate
+	// Resample the generated waveform if its sample rate differs from the target sample rate
 	if individual.SampleRate != sampleRate {
-		// Resample if necessary (implement resampling if your application requires it)
-		// For simplicity, we assume the sample rates match
+		generatedWaveform = synth.Resample(generatedWaveform, individual.SampleRate, sampleRate)
 	}
 
-	// Calculate time-domain MSE
-	timeMSE := compareWaveforms(generatedWaveform, loadedWaveform)
+	// Resample the loaded waveform if necessary
+	if originalSampleRate := 44100; sampleRate != originalSampleRate {
+		loadedWaveform = synth.Resample(loadedWaveform, originalSampleRate, sampleRate)
+	}
 
-	// Calculate frequency-domain MSE
+	// Compare the waveforms in time and frequency domains
+	timeMSE := compareWaveforms(generatedWaveform, loadedWaveform)
 	freqMSE := compareWaveformsFFT(generatedWaveform, loadedWaveform, sampleRate)
 
 	// Combine the two MSEs with weighting factors
-	// You can adjust the weights based on which aspect you want to prioritize
 	combinedMSE := 0.5*timeMSE + 0.5*freqMSE
 
 	// Calculate expected duration based on ADSR parameters
-	expectedDuration := individual.Attack + individual.Decay + individual.Release // Assuming Sustain does not add to duration
-
-	// Apply penalty if duration is below the minimum threshold
+	expectedDuration := individual.Attack + individual.Decay + individual.Release
 	if expectedDuration < minSampleDuration {
 		penalty := (minSampleDuration - expectedDuration) * 1000 // Scale penalty appropriately
 		combinedMSE += penalty
 	}
-
-	// Apply penalty if duration is above the maximum threshold
 	if expectedDuration > maxSampleDuration {
 		penalty := (expectedDuration - maxSampleDuration) * 1000 // Scale penalty appropriately
 		combinedMSE += penalty
@@ -272,8 +268,19 @@ func compareWaveforms(waveform1, waveform2 []float64) float64 {
 
 // Randomize all pads (instead of mutating)
 func randomizeAllPads() {
-	for i := 0; i < numPads; i++ {
-		pads[i] = synth.NewRandomKick(nil, sampleRate, bitDepth, channels)
+	switch soundTypes[soundTypeSelectedIndex] {
+	case "kick":
+		for i := 0; i < numPads; i++ {
+			pads[i] = synth.NewRandomKick(nil, sampleRate, bitDepth, channels)
+		}
+	case "snare":
+		for i := 0; i < numPads; i++ {
+			pads[i] = synth.NewRandomSnare(nil, sampleRate, bitDepth, channels)
+		}
+	default:
+		for i := 0; i < numPads; i++ {
+			pads[i] = synth.NewRandomKick(nil, sampleRate, bitDepth, channels)
+		}
 	}
 }
 
