@@ -27,14 +27,13 @@ Kick drum audio sample generator. Note that this entire program is a bit experim
 ## Requirements
 
 * `sdl2`
-* `glfw`
 * `go` (1.23 or later)
 
 ## Installation
 
 ### Arch Linux
 
-Build (with SDL2):
+Build:
 
     go build -tags=enable_cimgui_sdl2 -mod=mod
 
