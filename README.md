@@ -49,6 +49,6 @@ Open a terminal and type in:
 
 ## General info
 
-* Version: 1.5.0
+* Version: 1.5.1
 * Author: Alexander F. Rødseth &lt;xyproto@archlinux.org&gt;
 * License: MIT
