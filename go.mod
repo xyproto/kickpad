@@ -7,7 +7,7 @@ require (
 	github.com/go-audio/wav v1.1.0
 	github.com/mjibson/go-dsp v0.0.0-20180508042940-11479a337f12
 	github.com/xyproto/playsample v0.2.0
-	github.com/xyproto/synth v1.11.1
+	github.com/xyproto/synth v1.12.2
 )
 
 require (
