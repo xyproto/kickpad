@@ -70,20 +70,19 @@ const (
 var (
 
 	// List of available sound types for the drop-down
-	soundTypes                   = []string{"kick", "clap", "snare", "closed_hh", "open_hh", "rimshot", "tom", "percussion", "ride", "crash", "bass", "xylophone", "lead"}
-	soundTypeSelectedIndex int32 = 0 // Index for the selected sound type
+	soundTypes = []synth.SoundType{synth.Kick, synth.Clap, synth.Snare, synth.ClosedHH, synth.OpenHH, synth.Rimshot, synth.Tom, synth.Percussion, synth.Ride, synth.Crash, synth.Bass, synth.Xylophone, synth.Lead}
 
 	activePadIndex  int
 	pads            [numPads]*synth.Settings
-	padSoundTypes   = make([]string, numPads)                 // Store sound type for each pad
-	loadedWaveform  []float64                                 // Loaded .wav file waveform data
-	trainingOngoing bool                                      // Indicates whether the GA is running
-	wavFilePath     string                    = "kick909.wav" // Default .wav file path
-	statusMessage   string                                    // Status message displayed at the bottom
-	cancelTraining  chan bool                                 // Channel to cancel GA training
-	sampleRates                               = []int{44100, 48000, 96000, 192000}
-	bitDepth        int                       = defaultBitDepth
-	sampleRate      int                       = sampleRates[0]
+	padSoundTypes   = make([]synth.SoundType, numPads)                 // Store sound type for each pad
+	loadedWaveform  []float64                                          // Loaded .wav file waveform data
+	trainingOngoing bool                                               // Indicates whether the GA is running
+	wavFilePath     string                             = "kick909.wav" // Default .wav file path
+	statusMessage   string                                             // Status message displayed at the bottom
+	cancelTraining  chan bool                                          // Channel to cancel GA training
+	sampleRates                                        = []int{44100, 48000, 96000, 192000}
+	bitDepth        int                                = defaultBitDepth
+	sampleRate      int                                = sampleRates[0]
 
 	mu sync.Mutex
 
@@ -96,8 +95,10 @@ var (
 	muPlayer sync.Mutex         // Mutex to ensure thread safety
 )
 
+//var soundTypes = []string{"Kick", "Clap", "Snare", "ClosedHH", "OpenHH", "Rimshot", "Tom", "Percussion", "Ride", "Crash", "Bass", "Xylophone", "Lead"}
+
 // Helper function to find the index of a sound type
-func indexOfSoundType(soundType string) int {
+func indexOfSoundType(soundType synth.SoundType) int {
 	for i, s := range soundTypes {
 		if s == soundType {
 			return i
@@ -165,7 +166,7 @@ func playWavFile() error {
 
 // compareWaveformsSafe compares two waveforms using both time-domain and frequency-domain MSE
 func compareWaveformsSafe(individual *synth.Settings) float64 {
-	generatedWaveform, err := individual.Generate(soundTypes[soundTypeSelectedIndex])
+	generatedWaveform, err := individual.Generate()
 	if err != nil {
 		return math.Inf(1) // Assign worst fitness if generation fails
 	}
@@ -280,15 +281,9 @@ func compareWaveforms(waveform1, waveform2 []float64) float64 {
 
 // Randomize all pads based on their individual sound types
 func randomizeAllPads() {
+	currentSoundType := pads[activePadIndex].SoundType
 	for i := 0; i < numPads; i++ {
-		switch padSoundTypes[i] {
-		case "kick":
-			pads[i] = synth.NewRandomKick(nil, sampleRate, bitDepth, channels)
-		case "snare":
-			pads[i] = synth.NewRandomSnare(nil, sampleRate, bitDepth, channels)
-		default:
-			pads[i] = synth.NewRandomKick(nil, sampleRate, bitDepth, channels)
-		}
+		pads[i] = synth.NewRandom(currentSoundType, nil, sampleRate, bitDepth, channels)
 	}
 }
 
@@ -382,7 +377,7 @@ func optimizeSettings(allWaveforms bool) {
 	// Initialize population
 	population := make([]*synth.Settings, populationSize)
 	for i := 0; i < populationSize; i++ {
-		population[i] = synth.NewRandomKick(nil, sampleRate, bitDepth, channels)
+		population[i] = synth.NewRandom(synth.Kick, nil, sampleRate, bitDepth, channels)
 		// Ensure WaveformType is within the desired range
 		if !allWaveforms {
 			population[i].WaveformType = rand.Intn(2) // Sine or Triangle
@@ -595,7 +590,7 @@ func createPadWidget(cfg *synth.Settings, padLabel string, padIndex int) g.Widge
 
 					// Generate and play the sound when the pad is clicked
 					go func() {
-						if err := GeneratePlay(soundTypes[soundTypeSelectedIndex], pads[activePadIndex]); err != nil {
+						if err := GeneratePlay(pads[activePadIndex]); err != nil {
 							setStatusMessage(fmt.Sprintf("Error: Failed to play sound: %v", err))
 						} else {
 							setStatusMessage(fmt.Sprintf("Playing sound from %s", padLabel))
@@ -612,11 +607,11 @@ func createPadWidget(cfg *synth.Settings, padLabel string, padIndex int) g.Widge
 			g.Button("Save").OnClick(func() {
 				pads[padIndex].SampleRate = sampleRate
 				pads[padIndex].BitDepth = bitDepth
-				fileName, err := pads[padIndex].GenerateAndSaveTo(soundTypes[soundTypeSelectedIndex], ".")
+				fileName, err := pads[padIndex].GenerateAndSaveTo(".")
 				if err != nil {
-					setStatusMessage(fmt.Sprintf("Error: Failed to save %s to %s", soundTypes[soundTypeSelectedIndex], fileName))
+					setStatusMessage(fmt.Sprintf("Error: Failed to save %s to %s", pads[padIndex].SoundType, fileName))
 				} else {
-					setStatusMessage(fmt.Sprintf("%s saved to %s", soundTypes[soundTypeSelectedIndex], fileName))
+					setStatusMessage(fmt.Sprintf("%s saved to %s", pads[padIndex].SoundType, fileName))
 				}
 				g.Update()
 			}),
@@ -626,9 +621,6 @@ func createPadWidget(cfg *synth.Settings, padLabel string, padIndex int) g.Widge
 
 func createSlidersForSelectedPad() g.Widget {
 	cfg := pads[activePadIndex]
-
-	// Update sound type index to match the current pad's sound type
-	soundTypeSelectedIndex = int32(indexOfSoundType(padSoundTypes[activePadIndex]))
 
 	// Convert float64 to float32 for sliders
 	attack := float32(cfg.Attack)
@@ -644,28 +636,24 @@ func createSlidersForSelectedPad() g.Widget {
 	waveforms := []string{"Sine", "Triangle", "Sawtooth", "Square", "Noise White", "Noise Pink", "Noise Brown"}
 	waveformSelectedIndex = int32(cfg.WaveformType)
 
+	var soundTypeStrings []string
+	for _, soundType := range soundTypes {
+		soundTypeStrings = append(soundTypeStrings, soundType.String())
+	}
+
+	var currentSoundType synth.SoundType = pads[activePadIndex].SoundType
+	soundTypeSelectedIndex := int32(currentSoundType)
+
 	return g.Column(
 		g.Label(fmt.Sprintf("Pad %d settings:", activePadIndex+1)),
 		g.Dummy(30, 0),
 		// Dropdown for sound type selection
 		g.Row(
 			g.Label("Sound Type"),
-			g.Combo("Sound Type", soundTypes[soundTypeSelectedIndex], soundTypes, &soundTypeSelectedIndex).Size(150).OnChange(func() {
-				// Change the sound type only for the selected pad
-				padSoundTypes[activePadIndex] = soundTypes[soundTypeSelectedIndex]
-
+			g.Combo("Sound Type", pads[activePadIndex].SoundType.String(), soundTypeStrings, &soundTypeSelectedIndex).Size(150).OnChange(func() {
 				// Randomize settings for the currently selected pad
-				switch soundTypes[soundTypeSelectedIndex] {
-				case "kick":
-					pads[activePadIndex] = synth.NewRandomKick(nil, sampleRate, bitDepth, channels)
-				case "snare":
-					pads[activePadIndex] = synth.NewRandomSnare(nil, sampleRate, bitDepth, channels)
-				// Add more sound types as needed
-				default:
-					pads[activePadIndex] = synth.NewRandomKick(nil, sampleRate, bitDepth, channels)
-				}
-
-				g.Update() // Refresh UI with new randomized settings
+				pads[activePadIndex] = synth.NewRandom(soundTypes[currentSoundType], nil, sampleRate, bitDepth, channels)
+				g.Update() // Refresh UI
 			}),
 		),
 		g.Dummy(30, 0),
@@ -731,7 +719,7 @@ func createSlidersForSelectedPad() g.Widget {
 		g.Row(
 			g.Button("Play").OnClick(func() {
 				setStatusMessage("")
-				err := GeneratePlay(padSoundTypes[activePadIndex], pads[activePadIndex])
+				err := GeneratePlay(pads[activePadIndex])
 				if err != nil {
 					setStatusMessage(fmt.Sprintf("Error: Failed to play %s.", padSoundTypes[activePadIndex]))
 				}
@@ -744,7 +732,7 @@ func createSlidersForSelectedPad() g.Widget {
 			g.Button("Save").OnClick(func() {
 				pads[activePadIndex].SampleRate = sampleRate
 				pads[activePadIndex].BitDepth = bitDepth
-				fileName, err := pads[activePadIndex].GenerateAndSaveTo(padSoundTypes[activePadIndex], ".")
+				fileName, err := pads[activePadIndex].GenerateAndSaveTo(".")
 				if err != nil {
 					setStatusMessage(fmt.Sprintf("Error: Failed to save %s to %s", padSoundTypes[activePadIndex], fileName))
 				} else {
@@ -841,14 +829,13 @@ func generateTrainingButtons() g.Widget {
 }
 
 // GeneratePlay generates and plays the current kick drum sound
-func GeneratePlay(t string, cfg *synth.Settings) error {
+func GeneratePlay(cfg *synth.Settings) error {
 	muPlayer.Lock()         // Lock the mutex before accessing the player
 	defer muPlayer.Unlock() // Ensure the mutex is unlocked after the function completes
 	if player == nil || !player.Initialized {
 		return errors.New("Player is not initialized")
 	}
-
-	samples, err := cfg.Generate(t)
+	samples, err := cfg.Generate()
 	if err != nil {
 		return err
 	}
@@ -862,10 +849,11 @@ func main() {
 	}
 	defer player.Close()
 
+	const defaultSoundType = synth.Kick
+
 	// Initialize random settings for the 16 pads using synth.NewRandomKick() and sound type "kick"
 	for i := 0; i < numPads; i++ {
-		pads[i] = synth.NewRandomKick(nil, sampleRate, bitDepth, channels)
-		padSoundTypes[i] = "kick"
+		pads[i] = synth.NewRandom(defaultSoundType, nil, sampleRate, bitDepth, channels)
 	}
 
 	// Set the first pad as selected
