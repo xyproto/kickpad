@@ -20,9 +20,9 @@ import (
 )
 
 const (
-	versionString = "Kickpad 1.5.0"
+	versionString = "Kickpad 1.5.2"
 
-	channels = 2
+	channels = 1
 
 	buttonSize      = 100
 	numPads         = 16
