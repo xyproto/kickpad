@@ -9,12 +9,12 @@ Experimental kick drum audio sample generator.
 * Can be used for sound design of kick drum sounds, for trying different waveforms and selecting different parameters.
 * Can be used for loading an existing `.wav` audio sample and then evolve the settings so that they generate a kick drum sound that is as close as possible to the given `.wav`, using GA (genetic algorithms).
 * Can be used for setting up 16 different kick drum sound, which can then be played by clicking the pad buttons.
+* Tested on Arch Linux and macOS.
 
 ## Installation
 
-Install SDL2, SDL2_mix, GLFW and Go 1.23 or later.
-
-The simply `go install github.com/xyproto/kickpad@latest` and the `kickpad` executable should be built and placed in `$GOBIN` (usually `~/go/bin`).
+* Install SDL2, SDL2_mix, GLFW and Go 1.23 or later.
+* The simply `go install github.com/xyproto/kickpad@latest` and the `kickpad` executable should be built and placed in `$GOBIN` (usually `~/go/bin`).
 
 ## What are all the buttons?
 
