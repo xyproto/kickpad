@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	_ "embed"
 	"errors"
 	"fmt"
 	"image/color"
@@ -9,8 +11,8 @@ import (
 	"math/cmplx"
 	"math/rand"
 	"os"
-	"path/filepath"
 	"sync"
+	"sync/atomic"
 
 	g "github.com/AllenDang/giu"
 	"github.com/go-audio/wav"
@@ -20,215 +22,169 @@ import (
 )
 
 const (
-	versionString = "Kickpad 1.5.2"
-
-	channels = 1
-
-	buttonSize      = 100
-	numPads         = 16
-	maxGenerations  = 1000
-	maxStagnation   = 10 // Stop after 10 generations with no fitness improvement
-	defaultBitDepth = 16
-	populationSize  = 100
-	tournamentSize  = 5
-	eliteCount      = 10
-	mutationRate    = 0.05
-
-	// Minimum and Maximum values for ADSR parameters
-	minAttack = 0.05 // seconds
-	maxAttack = 0.5  // seconds
-
-	minDecay = 0.05 // seconds
-	maxDecay = 0.5  // seconds
-
-	minSustain = 0.1 // Sustain level (0.0 to 1.0)
-	maxSustain = 1.0 // Sustain level
-
-	minRelease = 0.05 // seconds
-	maxRelease = 1.0  // seconds
-
-	// Additional parameters
-	minDrive = 0.0
-	maxDrive = 1.0
-
-	minFilterCutoff = 500   // Hz
-	maxFilterCutoff = 10000 // Hz
-
-	minSweep = 0.1 // seconds
-	maxSweep = 2.0 // seconds
-
-	minPitchDecay = 0.1 // seconds
-	maxPitchDecay = 1.5 // seconds
-
-	minNoiseAmount = 0.0
-	maxNoiseAmount = 1.0
-
-	minSampleDuration = 0.1 // seconds
-	maxSampleDuration = 2.0 // seconds
+	versionString     = "Kickpad 1.5.3"
+	channels          = 1
+	buttonSize        = 100
+	numPads           = 16
+	maxGenerations    = 1000
+	maxStagnation     = 10
+	defaultBitDepth   = 16
+	populationSize    = 100
+	tournamentSize    = 5
+	eliteCount        = 10
+	mutationRate      = 0.05
+	minAttack         = 0.05
+	maxAttack         = 0.5
+	minDecay          = 0.05
+	maxDecay          = 0.5
+	minSustain        = 0.1
+	maxSustain        = 1.0
+	minRelease        = 0.05
+	maxRelease        = 1.0
+	minDrive          = 0.0
+	maxDrive          = 1.0
+	minFilterCutoff   = 500
+	maxFilterCutoff   = 10000
+	minSweep          = 0.1
+	maxSweep          = 2.0
+	minPitchDecay     = 0.1
+	maxPitchDecay     = 1.5
+	minNoiseAmount    = 0.0
+	maxNoiseAmount    = 1.0
+	minSampleDuration = 0.1
+	maxSampleDuration = 2.0
 )
 
 var (
+	//go:embed kick909.wav
+	kick909Wav []byte
 
-	// List of available sound types for the drop-down
-	soundTypes = []synth.SoundType{synth.Kick, synth.Clap, synth.Snare, synth.ClosedHH, synth.OpenHH, synth.Rimshot, synth.Tom, synth.Percussion, synth.Ride, synth.Crash, synth.Bass, synth.Xylophone, synth.Lead}
-
-	activePadIndex  int
-	pads            [numPads]*synth.Settings
-	padSoundTypes   = make([]synth.SoundType, numPads)                 // Store sound type for each pad
-	loadedWaveform  []float64                                          // Loaded .wav file waveform data
-	trainingOngoing bool                                               // Indicates whether the GA is running
-	wavFilePath     string                             = "kick909.wav" // Default .wav file path
-	statusMessage   string                                             // Status message displayed at the bottom
-	cancelTraining  chan bool                                          // Channel to cancel GA training
-	sampleRates                                        = []int{44100, 48000, 96000, 192000}
-	bitDepth        int                                = defaultBitDepth
-	sampleRate      int                                = sampleRates[0]
-
-	mu sync.Mutex
-
-	// Dropdown selection index for the waveform
+	soundTypes            = []synth.SoundType{synth.Kick, synth.Clap, synth.Snare, synth.ClosedHH, synth.OpenHH, synth.Rimshot, synth.Tom, synth.Percussion, synth.Ride, synth.Crash, synth.Bass, synth.Xylophone, synth.Lead}
+	activePadIndex        int
+	pads                  [numPads]*synth.Settings
+	padSoundTypes         = make([]synth.SoundType, numPads)
+	loadedWaveform        []float64
+	trainingOngoing       int32
+	wavFilePath           string
+	statusMessage         string
+	cancelTraining        chan struct{}
+	sampleRates               = []int{44100, 48000, 96000, 192000}
+	bitDepth              int = defaultBitDepth
+	sampleRate            int = sampleRates[0]
+	mu                    sync.Mutex
 	waveformSelectedIndex int32
 	sampleRateIndex       int32
 	bitDepthSelected      bool
-
-	player   *playsample.Player // Global player instance
-	muPlayer sync.Mutex         // Mutex to ensure thread safety
+	player                *playsample.Player
+	muPlayer              sync.Mutex
 )
 
-// Load a .wav file and store the waveform for comparison
-func loadWavFile() error {
-	workingDir, err := os.Getwd()
+func loadWavData(data []byte) error {
+	reader := bytes.NewReader(data)
+	decoder := wav.NewDecoder(reader)
+	buffer, err := decoder.FullPCMBuffer()
 	if err != nil {
-		setStatusMessage("Error: Could not get working directory")
+		setStatusMessage("Error: Failed to decode embedded .wav data")
 		return err
 	}
+	loadedWaveform = make([]float64, len(buffer.Data))
+	for i, sample := range buffer.Data {
+		loadedWaveform[i] = float64(sample) / math.MaxInt16
+	}
+	setStatusMessage("Loaded embedded .wav data")
+	return nil
+}
 
-	filePath := filepath.Join(workingDir, wavFilePath)
+func loadWavFile() error {
+	filePath := wavFilePath
+	if filePath == "" {
+		setStatusMessage("No .wav file path provided")
+		return errors.New("no .wav file path provided")
+	}
 	file, err := os.Open(filePath)
 	if err != nil {
 		setStatusMessage(fmt.Sprintf("Error: Failed to open .wav file %s", filePath))
 		return err
 	}
 	defer file.Close()
-
 	decoder := wav.NewDecoder(file)
 	buffer, err := decoder.FullPCMBuffer()
 	if err != nil {
 		setStatusMessage(fmt.Sprintf("Error: Failed to decode .wav file %s", filePath))
 		return err
 	}
-
 	loadedWaveform = make([]float64, len(buffer.Data))
 	for i, sample := range buffer.Data {
-		loadedWaveform[i] = float64(sample) / math.MaxInt16 // Normalize to [-1, 1] range
+		loadedWaveform[i] = float64(sample) / math.MaxInt16
 	}
-
 	setStatusMessage(fmt.Sprintf("Loaded .wav file: %s", filePath))
 	return nil
 }
 
-// Play the loaded .wav file using a command-line player
-func playWavFile() error {
-	workingDir, err := os.Getwd()
-	if err != nil {
-		setStatusMessage("Error: Could not get working directory")
-		return err
-	}
-
-	filePath := filepath.Join(workingDir, wavFilePath)
-
-	muPlayer.Lock()         // Lock the mutex before accessing the player
-	defer muPlayer.Unlock() // Ensure the mutex is unlocked after the function completes
+func playLoadedWaveform() error {
+	muPlayer.Lock()
+	defer muPlayer.Unlock()
 	if player == nil || !player.Initialized {
 		return errors.New("audio player is not initialized")
 	}
-
-	if err := player.PlayWav(filePath); err != nil {
-		setStatusMessage(fmt.Sprintf("Error: Failed to play .wav file %s", filePath))
-		return err
+	if loadedWaveform == nil || len(loadedWaveform) == 0 {
+		return errors.New("no waveform loaded")
 	}
-
-	setStatusMessage(fmt.Sprintf("Playing .wav file: %s", filePath))
-	return nil
+	return player.PlayWaveform(loadedWaveform, 44100, 16, 1)
 }
 
-// compareWaveformsSafe compares two waveforms using both time-domain and frequency-domain MSE
 func compareWaveformsSafe(individual *synth.Settings) float64 {
 	generatedWaveform, err := individual.Generate()
 	if err != nil {
-		return math.Inf(1) // Assign worst fitness if generation fails
+		return math.Inf(1)
 	}
-
-	// Resample the generated waveform if its sample rate differs from the target sample rate
 	if individual.SampleRate != sampleRate {
 		generatedWaveform = synth.Resample(generatedWaveform, individual.SampleRate, sampleRate)
 	}
-
-	// Resample the loaded waveform if necessary
 	if originalSampleRate := 44100; sampleRate != originalSampleRate {
 		loadedWaveform = synth.Resample(loadedWaveform, originalSampleRate, sampleRate)
 	}
-
-	// Compare the waveforms in time and frequency domains
 	timeMSE := compareWaveforms(generatedWaveform, loadedWaveform)
 	freqMSE := compareWaveformsFFT(generatedWaveform, loadedWaveform, sampleRate)
-
-	// Combine the two MSEs with weighting factors
 	combinedMSE := 0.5*timeMSE + 0.5*freqMSE
-
-	// Calculate expected duration based on ADSR parameters
 	expectedDuration := individual.Attack + individual.Decay + individual.Release
 	if expectedDuration < minSampleDuration {
-		penalty := (minSampleDuration - expectedDuration) * 1000 // Scale penalty appropriately
+		penalty := (minSampleDuration - expectedDuration) * 1000
 		combinedMSE += penalty
 	}
 	if expectedDuration > maxSampleDuration {
-		penalty := (expectedDuration - maxSampleDuration) * 1000 // Scale penalty appropriately
+		penalty := (expectedDuration - maxSampleDuration) * 1000
 		combinedMSE += penalty
 	}
-
 	return combinedMSE
 }
 
-// compareWaveformsFFT compares two waveforms in the frequency domain using FFT-based MSE
 func compareWaveformsFFT(waveform1, waveform2 []float64, sampleRate int) float64 {
 	if waveform1 == nil || waveform2 == nil {
-		return math.Inf(1) // Assign worst fitness if any waveform is nil
+		return math.Inf(1)
 	}
-
-	// Determine the length for FFT (use the next power of two for efficiency)
 	n := nextPowerOfTwo(min(len(waveform1), len(waveform2)))
-
-	// Zero-pad the waveforms to length n
 	padded1 := make([]float64, n)
 	padded2 := make([]float64, n)
 	copy(padded1, waveform1)
 	copy(padded2, waveform2)
-
-	// Perform FFT on both waveforms
 	complex1 := fft.FFTReal(padded1)
 	complex2 := fft.FFTReal(padded2)
-
-	// Compute magnitude spectra
 	mag1 := make([]float64, n)
 	mag2 := make([]float64, n)
 	for i := 0; i < n; i++ {
 		mag1[i] = cmplx.Abs(complex1[i])
 		mag2[i] = cmplx.Abs(complex2[i])
 	}
-
-	// Compute MSE between magnitude spectra
 	mse := 0.0
 	for i := 0; i < n; i++ {
 		diff := mag1[i] - mag2[i]
 		mse += diff * diff
 	}
 	mse /= float64(n)
-
 	return mse
 }
 
-// Helper function to find the next power of two greater than or equal to n
 func nextPowerOfTwo(n int) int {
 	if n <= 0 {
 		return 1
@@ -240,7 +196,6 @@ func nextPowerOfTwo(n int) int {
 	return power
 }
 
-// Helper function to find the minimum of two integers
 func min(a, b int) int {
 	if a < b {
 		return a
@@ -248,17 +203,14 @@ func min(a, b int) int {
 	return b
 }
 
-// Compare two waveforms using Mean Squared Error (MSE)
 func compareWaveforms(waveform1, waveform2 []float64) float64 {
 	if waveform1 == nil || waveform2 == nil {
-		return math.Inf(1) // Assign worst fitness if any waveform is nil
+		return math.Inf(1)
 	}
-
 	minLength := len(waveform1)
 	if len(waveform2) < minLength {
 		minLength = len(waveform2)
 	}
-
 	mse := 0.0
 	for i := 0; i < minLength; i++ {
 		diff := waveform1[i] - waveform2[i]
@@ -267,27 +219,20 @@ func compareWaveforms(waveform1, waveform2 []float64) float64 {
 	return mse / float64(minLength)
 }
 
-// Randomize all pads based on their individual sound types
 func randomizeAllPads() {
-	var randomSoundType synth.SoundType
 	for i := 0; i < numPads; i++ {
-		randomSoundType = synth.Kick
+		var randomSoundType synth.SoundType = synth.Kick
 		if rand.Float64() < 0.5 {
 			randomSoundType = synth.Snare
 		}
-		//randomSoundType = soundTypes[rand.Intn(len(soundTypes))]
 		pads[i] = synth.NewRandom(randomSoundType, nil, sampleRate, bitDepth, channels)
 	}
 }
 
-// Tournament Selection: Selects the best individual from a random subset of the population
 func tournamentSelection(population []*synth.Settings, fitnesses []float64, tournamentSize int) *synth.Settings {
-	// Randomly select the first competitor
 	bestIndex := rand.Intn(len(population))
 	best := population[bestIndex]
 	bestFitness := fitnesses[bestIndex]
-
-	// Iterate through the rest of the tournament competitors
 	for i := 1; i < tournamentSize; i++ {
 		competitorIndex := rand.Intn(len(population))
 		competitorFitness := fitnesses[competitorIndex]
@@ -300,13 +245,9 @@ func tournamentSelection(population []*synth.Settings, fitnesses []float64, tour
 	return best
 }
 
-// Single-Point Crossover: Combines two parents to produce two offspring
 func singlePointCrossover(parent1, parent2 *synth.Settings) (*synth.Settings, *synth.Settings) {
 	child1 := synth.CopySettings(parent1)
 	child2 := synth.CopySettings(parent2)
-
-	// Define crossover points for each parameter
-	// For simplicity, we'll randomly decide for each parameter whether to take from parent1 or parent2
 	if rand.Float64() < 0.5 {
 		child1.Attack = parent2.Attack
 		child2.Attack = parent1.Attack
@@ -347,7 +288,6 @@ func singlePointCrossover(parent1, parent2 *synth.Settings) (*synth.Settings, *s
 		child1.NoiseAmount = parent2.NoiseAmount
 		child2.NoiseAmount = parent1.NoiseAmount
 	}
-
 	return child1, child2
 }
 
@@ -362,23 +302,16 @@ func optimizeSettings(allWaveforms bool) {
 		setStatusMessage("Error: No .wav file loaded. Please load a .wav file first.")
 		return
 	}
-
-	// Display initial status message before starting the training
 	setStatusMessage("Training started...")
-	g.Update()
-
 	// Initialize population
 	population := make([]*synth.Settings, populationSize)
 	for i := 0; i < populationSize; i++ {
 		population[i] = synth.NewRandom(synth.Kick, nil, sampleRate, bitDepth, channels)
-		// Ensure WaveformType is within the desired range
 		if !allWaveforms {
-			population[i].WaveformType = rand.Intn(2) // Sine or Triangle
+			population[i].WaveformType = rand.Intn(2)
 		} else {
-			population[i].WaveformType = rand.Intn(7) // "Sine", "Triangle", "Sawtooth", "Square", "Noise White", "Noise Pink" or "Noise Brown"
+			population[i].WaveformType = rand.Intn(7)
 		}
-
-		// Clamp ADSR and other parameters to their min and max values
 		population[i].Attack = clamp(population[i].Attack, minAttack, maxAttack)
 		population[i].Decay = clamp(population[i].Decay, minDecay, maxDecay)
 		population[i].Sustain = clamp(population[i].Sustain, minSustain, maxSustain)
@@ -389,27 +322,21 @@ func optimizeSettings(allWaveforms bool) {
 		population[i].PitchDecay = clamp(population[i].PitchDecay, minPitchDecay, maxPitchDecay)
 		population[i].NoiseAmount = clamp(population[i].NoiseAmount, minNoiseAmount, maxNoiseAmount)
 	}
-
 	bestSettings := synth.CopySettings(population[0])
 	bestFitness := compareWaveformsSafe(bestSettings)
 	stagnationCount := 0
-
-	for generation := 0; generation < maxGenerations && trainingOngoing; generation++ {
+	for generation := 0; generation < maxGenerations && atomic.LoadInt32(&trainingOngoing) == 1; generation++ {
 		select {
 		case <-cancelTraining:
 			setStatusMessage("Training canceled.")
-			trainingOngoing = false
+			atomic.StoreInt32(&trainingOngoing, 0)
 			return
 		default:
 		}
-
-		// Evaluate fitness for the current population
 		fitnesses := make([]float64, populationSize)
 		for i, individual := range population {
 			fitnesses[i] = compareWaveformsSafe(individual)
 		}
-
-		// Find the best individual in the current population
 		currentBestFitness := math.Inf(1)
 		currentBestIndex := -1
 		for i, fitness := range fitnesses {
@@ -418,52 +345,36 @@ func optimizeSettings(allWaveforms bool) {
 				currentBestIndex = i
 			}
 		}
-
-		// Update best settings if a better individual is found
 		if currentBestIndex != -1 && fitnesses[currentBestIndex] < bestFitness {
 			bestFitness = fitnesses[currentBestIndex]
 			bestSettings = synth.CopySettings(population[currentBestIndex])
-			pads[activePadIndex] = bestSettings // Save the best result to the active pad
+			pads[activePadIndex] = bestSettings
 			pads[activePadIndex].SampleRate = sampleRate
 			pads[activePadIndex].BitDepth = bitDepth
 			stagnationCount = 0
-
 			if bestFitness < 1e-3 {
 				setStatusMessage(fmt.Sprintf("Global optimum found at generation %d!", generation))
-				trainingOngoing = false
+				atomic.StoreInt32(&trainingOngoing, 0)
 				return
 			}
 		} else {
 			stagnationCount++
 			if stagnationCount >= maxStagnation {
 				setStatusMessage(fmt.Sprintf("Training stopped due to no improvement in %d generations.", maxStagnation))
-				trainingOngoing = false
+				atomic.StoreInt32(&trainingOngoing, 0)
 				return
 			}
 		}
-
-		// Create a new population
 		newPopulation := make([]*synth.Settings, 0, populationSize)
-
-		// Elitism: carry over the best individuals to the new population
 		for i := 0; i < eliteCount && i < populationSize; i++ {
 			newPopulation = append(newPopulation, synth.CopySettings(bestSettings))
 		}
-
-		// Generate the rest of the population through selection, crossover, and mutation
 		for len(newPopulation) < populationSize {
-			// Selection
 			parent1 := tournamentSelection(population, fitnesses, tournamentSize)
 			parent2 := tournamentSelection(population, fitnesses, tournamentSize)
-
-			// Crossover
 			child1, child2 := singlePointCrossover(parent1, parent2)
-
-			// Mutation
 			mutateSettings(child1, false)
 			mutateSettings(child2, false)
-
-			// Ensure mutated children respect parameter constraints
 			child1.Attack = clamp(child1.Attack, minAttack, maxAttack)
 			child1.Decay = clamp(child1.Decay, minDecay, maxDecay)
 			child1.Sustain = clamp(child1.Sustain, minSustain, maxSustain)
@@ -473,7 +384,6 @@ func optimizeSettings(allWaveforms bool) {
 			child1.Sweep = clamp(child1.Sweep, minSweep, maxSweep)
 			child1.PitchDecay = clamp(child1.PitchDecay, minPitchDecay, maxPitchDecay)
 			child1.NoiseAmount = clamp(child1.NoiseAmount, minNoiseAmount, maxNoiseAmount)
-
 			child2.Attack = clamp(child2.Attack, minAttack, maxAttack)
 			child2.Decay = clamp(child2.Decay, minDecay, maxDecay)
 			child2.Sustain = clamp(child2.Sustain, minSustain, maxSustain)
@@ -483,30 +393,18 @@ func optimizeSettings(allWaveforms bool) {
 			child2.Sweep = clamp(child2.Sweep, minSweep, maxSweep)
 			child2.PitchDecay = clamp(child2.PitchDecay, minPitchDecay, maxPitchDecay)
 			child2.NoiseAmount = clamp(child2.NoiseAmount, minNoiseAmount, maxNoiseAmount)
-
 			newPopulation = append(newPopulation, child1, child2)
 		}
-
-		// If the new population exceeds the desired size, trim it
 		if len(newPopulation) > populationSize {
 			newPopulation = newPopulation[:populationSize]
 		}
-
 		population = newPopulation
-
-		// Update the status message
 		setStatusMessage(fmt.Sprintf("Generation %d: Best fitness = %f", generation, bestFitness))
-		g.Update() // Update UI with the new generation status
 	}
-
-	// After training, save the best result to the active pad and update the sliders
 	pads[activePadIndex] = bestSettings
-	g.Update() // Update the sliders with the best result
 }
 
-// Function to mutate a single config
 func mutateSettings(cfg *synth.Settings, allWaveforms bool) {
-	// Mutate the configuration with a certain probability
 	if rand.Float64() < mutationRate {
 		cfg.Attack = clamp(cfg.Attack*(0.8+rand.Float64()*0.4), minAttack, maxAttack)
 	}
@@ -531,23 +429,18 @@ func mutateSettings(cfg *synth.Settings, allWaveforms bool) {
 	if rand.Float64() < mutationRate {
 		cfg.PitchDecay = clamp(cfg.PitchDecay*(0.8+rand.Float64()*0.4), minPitchDecay, maxPitchDecay)
 	}
-
-	// Mutate the waveform type with a certain probability
 	if rand.Float64() < mutationRate {
 		if !allWaveforms {
-			cfg.WaveformType = rand.Intn(2) // Sine or Triangle
+			cfg.WaveformType = rand.Intn(2)
 		} else {
-			cfg.WaveformType = rand.Intn(7) // "Sine", "Triangle", "Sawtooth", "Square", "Noise White", "Noise Pink" or "Noise Brown"
+			cfg.WaveformType = rand.Intn(7)
 		}
 	}
-
-	// Mutate the noise amount with a certain probability
 	if rand.Float64() < mutationRate {
 		cfg.NoiseAmount = clamp(cfg.NoiseAmount*(0.8+rand.Float64()*0.4), minNoiseAmount, maxNoiseAmount)
 	}
 }
 
-// Helper function to clamp a value between min and max
 func clamp(value, min, max float64) float64 {
 	if value < min {
 		return min
@@ -558,37 +451,29 @@ func clamp(value, min, max float64) float64 {
 	return value
 }
 
-// This function is tied to the pad's "Play" button
 func createPadWidget(cfg *synth.Settings, padLabel string, padIndex int) g.Widget {
 	buttonColor := cfg.Color()
-	padBorderColor := color.RGBA{0x0, 0x0, 0x0, 0xff} // black
-	padTextColor := color.RGBA{0x0, 0x0, 0x0, 0xff}   // black
-
+	padBorderColor := color.RGBA{0x0, 0x0, 0x0, 0xff}
+	padTextColor := color.RGBA{0x0, 0x0, 0x0, 0xff}
 	luminance := 0.299*float64(buttonColor.R) + 0.587*float64(buttonColor.G) + 0.114*float64(buttonColor.B)
-	if luminance < 128 { // dark background color
-		padTextColor = color.RGBA{0xff, 0xff, 0xff, 0xff} // white
+	if luminance < 128 {
+		padTextColor = color.RGBA{0xff, 0xff, 0xff, 0xff}
 	}
-
 	if padIndex == activePadIndex {
-		padBorderColor = color.RGBA{0xff, 0x0, 0x0, 0xff} // red for active pad
+		padBorderColor = color.RGBA{0xff, 0x0, 0x0, 0xff}
 	}
-
 	return g.Style().SetColor(g.StyleColorButton, buttonColor).To(
 		g.Column(
 			g.Style().SetColor(g.StyleColorText, padTextColor).SetColor(g.StyleColorBorder, padBorderColor).To(
 				g.Button(padLabel).Size(buttonSize, buttonSize).OnClick(func() {
-					// Set this pad as active and clear status message
 					activePadIndex = padIndex
 					setStatusMessage("")
-
-					// Generate and play the sound when the pad is clicked
 					go func() {
 						if err := GeneratePlay(pads[activePadIndex]); err != nil {
 							setStatusMessage(fmt.Sprintf("Error: Failed to play sound: %v", err))
 						} else {
 							setStatusMessage(fmt.Sprintf("Playing sound from %s", padLabel))
 						}
-						g.Update()
 					}()
 				}),
 			),
@@ -598,8 +483,6 @@ func createPadWidget(cfg *synth.Settings, padLabel string, padIndex int) g.Widge
 
 func createSlidersForSelectedPad() g.Widget {
 	cfg := pads[activePadIndex]
-
-	// Convert float64 to float32 for sliders
 	attack := float32(cfg.Attack)
 	decay := float32(cfg.Decay)
 	sustain := float32(cfg.Sustain)
@@ -608,33 +491,24 @@ func createSlidersForSelectedPad() g.Widget {
 	filterCutoff := float32(cfg.FilterCutoff)
 	sweep := float32(cfg.Sweep)
 	pitchDecay := float32(cfg.PitchDecay)
-
-	// List of available waveforms
 	waveforms := []string{"Sine", "Triangle", "Sawtooth", "Square", "Noise White", "Noise Pink", "Noise Brown"}
 	waveformSelectedIndex = int32(cfg.WaveformType)
-
 	var soundTypeStrings []string
 	for _, soundType := range soundTypes {
 		soundTypeStrings = append(soundTypeStrings, soundType.String())
 	}
-
 	var currentSoundType synth.SoundType = pads[activePadIndex].SoundType
 	soundTypeSelectedIndex := int32(currentSoundType)
-
 	return g.Column(
 		g.Label(fmt.Sprintf("Pad %d settings:", activePadIndex+1)),
 		g.Dummy(30, 0),
-		// Dropdown for sound type selection
 		g.Row(
 			g.Label("Sound Type"),
 			g.Combo("Sound Type", pads[activePadIndex].SoundType.String(), soundTypeStrings, &soundTypeSelectedIndex).Size(150).OnChange(func() {
-				// Randomize settings for the currently selected pad
 				pads[activePadIndex] = synth.NewRandom(soundTypes[currentSoundType], nil, sampleRate, bitDepth, channels)
-				g.Update() // Refresh UI
 			}),
 		),
 		g.Dummy(30, 0),
-		// Rest of the sliders for sound parameters
 		g.Row(
 			g.Label("Waveform"),
 			g.Combo("Waveform", waveforms[waveformSelectedIndex], waveforms, &waveformSelectedIndex).Size(150).OnChange(func() {
@@ -700,7 +574,6 @@ func createSlidersForSelectedPad() g.Widget {
 				if err != nil {
 					setStatusMessage(fmt.Sprintf("Error: Failed to play %s.", padSoundTypes[activePadIndex]))
 				}
-				g.Update() // Update the status message
 			}),
 			g.Button("Save").OnClick(func() {
 				pads[activePadIndex].SampleRate = sampleRate
@@ -711,28 +584,22 @@ func createSlidersForSelectedPad() g.Widget {
 				} else {
 					setStatusMessage(fmt.Sprintf("%s saved to %s", padSoundTypes[activePadIndex], fileName))
 				}
-				g.Update() // Update the status message
 			}),
 			g.Button("Randomize").OnClick(func() {
 				var randomSoundType synth.SoundType = synth.Kick
 				if rand.Float64() < 0.5 {
 					randomSoundType = synth.Snare
 				}
-				//randomSoundType := soundTypes[rand.Intn(len(soundTypes))]
 				pads[activePadIndex] = synth.NewRandom(randomSoundType, nil, sampleRate, bitDepth, channels)
-				g.Update() // Refresh the UI with randomized settings
 			}),
 			g.Button("Randomize all").OnClick(func() {
-				randomizeAllPads() // Randomize all pads
-				g.Update()         // Refresh the UI with randomized settings
+				randomizeAllPads()
 			}),
 		),
 	)
 }
 
-// Function to create the UI layout
 func loop() {
-	// Display the 16 pads in a 4x4 grid
 	padGrid := []g.Widget{}
 	padIndex := 0
 	for row := 0; row < 4; row++ {
@@ -743,8 +610,6 @@ func loop() {
 		}
 		padGrid = append(padGrid, g.Row(rowWidgets...))
 	}
-
-	// Build the layout with the grid on the left, sliders and buttons on the right, and text input for the .wav file path below
 	g.SingleWindow().Layout(
 		g.Row(
 			g.Column(padGrid...),
@@ -760,8 +625,7 @@ func loop() {
 						}
 					}),
 				),
-				// Use g.Condition before g.Row to ensure that rows aren't empty
-				g.Condition(len(loadedWaveform) > 0 || trainingOngoing,
+				g.Condition(len(loadedWaveform) > 0 || atomic.LoadInt32(&trainingOngoing) == 1,
 					g.Layout{
 						g.Row(generateTrainingButtons()),
 					},
@@ -769,55 +633,50 @@ func loop() {
 				),
 			),
 		),
-		// Status message label at the bottom
 		g.Label(statusMessage),
 	)
 }
 
-// Conditionally generate the "Find sound similar to WAV" and "Stop training" buttons
 func generateTrainingButtons() g.Widget {
 	if len(loadedWaveform) > 0 {
-		if trainingOngoing {
+		if atomic.LoadInt32(&trainingOngoing) == 1 {
 			return g.Row(
 				g.Button("Stop training").OnClick(func() {
-					if trainingOngoing {
-						cancelTraining <- true
+					if atomic.LoadInt32(&trainingOngoing) == 1 {
+						close(cancelTraining)
 					}
 				}),
 				g.Button("Play WAV").OnClick(func() {
-					err := playWavFile()
+					err := playLoadedWaveform()
 					if err != nil {
 						setStatusMessage("Error: Failed to play WAV")
 					}
-					g.Update() // Update status message for WAV playback
 				}),
 			)
 		}
 		return g.Row(
 			g.Button("Find sound similar to WAV").OnClick(func() {
-				if !trainingOngoing {
-					cancelTraining = make(chan bool)
-					trainingOngoing = true
-					const allWaveforms = true         // Only Sine and Triangle, or all available waveforms?
-					go optimizeSettings(allWaveforms) // Run the optimization in a goroutine
+				if atomic.LoadInt32(&trainingOngoing) == 0 {
+					cancelTraining = make(chan struct{})
+					atomic.StoreInt32(&trainingOngoing, 1)
+					const allWaveforms = true
+					go optimizeSettings(allWaveforms)
 				}
 			}),
 			g.Button("Play WAV").OnClick(func() {
-				err := playWavFile()
+				err := playLoadedWaveform()
 				if err != nil {
 					setStatusMessage("Error: Failed to play WAV")
 				}
-				g.Update() // Update status message for WAV playback
 			}),
 		)
 	}
-	return g.Dummy(0, 0) // Dummy widget if no buttons should be shown
+	return g.Dummy(0, 0)
 }
 
-// GeneratePlay generates and plays the current kick drum sound
 func GeneratePlay(cfg *synth.Settings) error {
-	muPlayer.Lock()         // Lock the mutex before accessing the player
-	defer muPlayer.Unlock() // Ensure the mutex is unlocked after the function completes
+	muPlayer.Lock()
+	defer muPlayer.Unlock()
 	if player == nil || !player.Initialized {
 		return errors.New("audio player is not initialized")
 	}
@@ -834,19 +693,15 @@ func main() {
 		log.Fatalln("Error: Audio Player failed to initialize.")
 	}
 	defer player.Close()
-
+	err := loadWavData(kick909Wav)
+	if err != nil {
+		log.Fatalln("Error loading embedded .wav data:", err)
+	}
 	const defaultSoundType = synth.Kick
-
-	// Initialize random settings for the 16 pads using synth.NewRandomKick() and sound type "kick"
 	for i := 0; i < numPads; i++ {
 		pads[i] = synth.NewRandom(defaultSoundType, nil, sampleRate, bitDepth, channels)
 	}
-
-	// Set the first pad as selected
 	activePadIndex = 0
-
 	setStatusMessage(versionString)
-
-	// Adjust the window size to fit the grid, buttons, and sliders better
 	g.NewMasterWindow("Kick Pad", 780, 445, g.MasterWindowFlagsNotResizable).Run(loop)
 }
