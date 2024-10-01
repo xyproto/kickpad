@@ -95,18 +95,6 @@ var (
 	muPlayer sync.Mutex         // Mutex to ensure thread safety
 )
 
-//var soundTypes = []string{"Kick", "Clap", "Snare", "ClosedHH", "OpenHH", "Rimshot", "Tom", "Percussion", "Ride", "Crash", "Bass", "Xylophone", "Lead"}
-
-// Helper function to find the index of a sound type
-func indexOfSoundType(soundType synth.SoundType) int {
-	for i, s := range soundTypes {
-		if s == soundType {
-			return i
-		}
-	}
-	return 0 // Default to 0 if not found (kick)
-}
-
 // Load a .wav file and store the waveform for comparison
 func loadWavFile() error {
 	workingDir, err := os.Getwd()
@@ -152,7 +140,7 @@ func playWavFile() error {
 	muPlayer.Lock()         // Lock the mutex before accessing the player
 	defer muPlayer.Unlock() // Ensure the mutex is unlocked after the function completes
 	if player == nil || !player.Initialized {
-		return errors.New("Player is not initialized")
+		return errors.New("audio player is not initialized")
 	}
 
 	if err := player.PlayWav(filePath); err != nil {
@@ -281,9 +269,14 @@ func compareWaveforms(waveform1, waveform2 []float64) float64 {
 
 // Randomize all pads based on their individual sound types
 func randomizeAllPads() {
-	currentSoundType := pads[activePadIndex].SoundType
+	var randomSoundType synth.SoundType
 	for i := 0; i < numPads; i++ {
-		pads[i] = synth.NewRandom(currentSoundType, nil, sampleRate, bitDepth, channels)
+		randomSoundType = synth.Kick
+		if rand.Float64() < 0.5 {
+			randomSoundType = synth.Snare
+		}
+		//randomSoundType = soundTypes[rand.Intn(len(soundTypes))]
+		pads[i] = synth.NewRandom(randomSoundType, nil, sampleRate, bitDepth, channels)
 	}
 }
 
@@ -599,22 +592,6 @@ func createPadWidget(cfg *synth.Settings, padLabel string, padIndex int) g.Widge
 					}()
 				}),
 			),
-			g.Button("Mutate").OnClick(func() {
-				mutateSettings(pads[padIndex], true)
-				activePadIndex = padIndex
-				g.Update() // Update UI with mutated settings
-			}),
-			g.Button("Save").OnClick(func() {
-				pads[padIndex].SampleRate = sampleRate
-				pads[padIndex].BitDepth = bitDepth
-				fileName, err := pads[padIndex].GenerateAndSaveTo(".")
-				if err != nil {
-					setStatusMessage(fmt.Sprintf("Error: Failed to save %s to %s", pads[padIndex].SoundType, fileName))
-				} else {
-					setStatusMessage(fmt.Sprintf("%s saved to %s", pads[padIndex].SoundType, fileName))
-				}
-				g.Update()
-			}),
 		),
 	)
 }
@@ -725,10 +702,6 @@ func createSlidersForSelectedPad() g.Widget {
 				}
 				g.Update() // Update the status message
 			}),
-			g.Button("Randomize all").OnClick(func() {
-				randomizeAllPads() // Randomize all pads
-				g.Update()         // Refresh the UI with randomized settings
-			}),
 			g.Button("Save").OnClick(func() {
 				pads[activePadIndex].SampleRate = sampleRate
 				pads[activePadIndex].BitDepth = bitDepth
@@ -739,6 +712,19 @@ func createSlidersForSelectedPad() g.Widget {
 					setStatusMessage(fmt.Sprintf("%s saved to %s", padSoundTypes[activePadIndex], fileName))
 				}
 				g.Update() // Update the status message
+			}),
+			g.Button("Randomize").OnClick(func() {
+				var randomSoundType synth.SoundType = synth.Kick
+				if rand.Float64() < 0.5 {
+					randomSoundType = synth.Snare
+				}
+				//randomSoundType := soundTypes[rand.Intn(len(soundTypes))]
+				pads[activePadIndex] = synth.NewRandom(randomSoundType, nil, sampleRate, bitDepth, channels)
+				g.Update() // Refresh the UI with randomized settings
+			}),
+			g.Button("Randomize all").OnClick(func() {
+				randomizeAllPads() // Randomize all pads
+				g.Update()         // Refresh the UI with randomized settings
 			}),
 		),
 	)
@@ -833,7 +819,7 @@ func GeneratePlay(cfg *synth.Settings) error {
 	muPlayer.Lock()         // Lock the mutex before accessing the player
 	defer muPlayer.Unlock() // Ensure the mutex is unlocked after the function completes
 	if player == nil || !player.Initialized {
-		return errors.New("Player is not initialized")
+		return errors.New("audio player is not initialized")
 	}
 	samples, err := cfg.Generate()
 	if err != nil {
@@ -859,7 +845,8 @@ func main() {
 	// Set the first pad as selected
 	activePadIndex = 0
 
+	setStatusMessage(versionString)
+
 	// Adjust the window size to fit the grid, buttons, and sliders better
-	wnd := g.NewMasterWindow(versionString, 780, 660, g.MasterWindowFlagsNotResizable)
-	wnd.Run(loop)
+	g.NewMasterWindow("Kick Pad", 780, 445, g.MasterWindowFlagsNotResizable).Run(loop)
 }
