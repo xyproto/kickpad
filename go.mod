@@ -6,8 +6,8 @@ require (
 	github.com/AllenDang/giu v0.8.2-0.20240925160912-ed0cb9e7048c
 	github.com/go-audio/wav v1.1.0
 	github.com/mjibson/go-dsp v0.0.0-20180508042940-11479a337f12
-	github.com/xyproto/playsample v0.2.0
-	github.com/xyproto/synth v1.12.2
+	github.com/xyproto/playsample v0.2.1
+	github.com/xyproto/synth v1.12.3
 )
 
 require (
