@@ -50,6 +50,6 @@ Open a terminal and type in:
 
 ## General info
 
-* Version: 1.5.2
+* Version: 1.5.3
 * Author: Alexander F. Rødseth &lt;xyproto@archlinux.org&gt;
 * License: MIT
