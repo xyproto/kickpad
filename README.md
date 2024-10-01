@@ -2,13 +2,19 @@
 
 Kick drum audio sample generator. Note that this entire program is a bit experimental.
 
-![screenshot](img/screenshot.png)
+![screenshot](img/screenshot2.png)
 
 ## Features and limitations
 
 * Can be used for sound design of kick drum sounds, for trying different waveforms and selecting different parameters.
 * Can be used for loading an existing `.wav` audio sample and then evolve the settings so that they generate a kick drum sound that is as close as possible to the given `.wav`, using GA (genetic algorithms).
 * Can be used for setting up 16 different kick drum sound, which can then be played by clicking the pad buttons.
+
+## Installation
+
+Install SDL2, SDL2_mix, GLFW and Go 1.23 or later.
+
+The simply `go install github.com/xyproto/kickpad@latest` and the `kickpad` executable should be built and placed in `$GOBIN` (usually `~/go/bin`).
 
 ## What are all the buttons?
 
@@ -23,30 +29,6 @@ Kick drum audio sample generator. Note that this entire program is a bit experim
 * The "Load WAV" button on the right side will try to load the filename in the input text box right in front of it. This will also make two new buttons visible:
   * The "Find kick similar to WAV" button, which will start evolving the current settings until they are as similar as possible to the currently loaded WAV audio sample, using a genetic algorithm (GA).
   * The "Play WAV" button, which will play the currently loaded WAV audio sample.
-
-## Requirements
-
-* `sdl2`
-* `glfw`
-* `go` (1.23 or later)
-
-## Installation
-
-### Arch Linux
-
-Build:
-
-    go build -tags=enable_cimgui_sdl2 -mod=mod
-
-Kickpad is available in AUR and can be installed with ie. yay:
-
-    yay -S kickpad
-
-## Running
-
-Open a terminal and type in:
-
-    kickpad
 
 ## General info
 
