@@ -33,5 +33,5 @@ Experimental kick drum audio sample generator.
 ## General info
 
 * Version: 1.5.3
-* Author: Alexander F. Rødseth &lt;xyproto@archlinux.org&gt;
+* Author: Alexander F. Rødseth
 * License: MIT
