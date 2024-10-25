@@ -1,4 +1,4 @@
-# Kickpad
+# Kick Pad
 
 Experimental kick drum audio sample generator.
 
