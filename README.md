@@ -14,7 +14,7 @@ Experimental kick drum audio sample generator.
 ## Installation
 
 * Install SDL2, SDL2_mix, GLFW and Go 1.23 or later.
-* The simply `go install github.com/xyproto/kickpad@latest` and the `kickpad` executable should be built and placed in `$GOBIN` (usually `~/go/bin`).
+* Then simply `go install github.com/xyproto/kickpad@latest` and the `kickpad` executable should be built and placed in `$GOBIN` (usually `~/go/bin`).
 
 ## What are all the buttons?
 
