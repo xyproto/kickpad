@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	versionString     = "Kickpad 1.5.3"
+	versionString     = "Kickpad 1.5.4"
 	channels          = 1
 	buttonSize        = 100
 	numPads           = 16
@@ -706,5 +706,5 @@ func main() {
 	}
 	activePadIndex = 0
 	setStatusMessage(versionString)
-	g.NewMasterWindow("Kick Pad", 780, 445, g.MasterWindowFlagsNotResizable).Run(loop)
+	g.NewMasterWindow(versionString, 780, 445, g.MasterWindowFlagsNotResizable).Run(loop)
 }

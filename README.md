@@ -1,4 +1,4 @@
-# Kick Pad
+# Kickpad
 
 Experimental kick drum audio sample generator.
 
@@ -32,6 +32,6 @@ Experimental kick drum audio sample generator.
 
 ## General info
 
-* Version: 1.5.3
+* Version: 1.5.4
 * Author: Alexander F. Rødseth
 * License: MIT
