@@ -493,19 +493,22 @@ func createSlidersForSelectedPad() g.Widget {
 	pitchDecay := float32(cfg.PitchDecay)
 	waveforms := []string{"Sine", "Triangle", "Sawtooth", "Square", "Noise White", "Noise Pink", "Noise Brown"}
 	waveformSelectedIndex = int32(cfg.WaveformType)
+
 	var soundTypeStrings []string
 	for _, soundType := range soundTypes {
 		soundTypeStrings = append(soundTypeStrings, soundType.String())
 	}
-	var currentSoundType synth.SoundType = pads[activePadIndex].SoundType
-	soundTypeSelectedIndex := int32(currentSoundType)
+
+	soundTypeSelectedIndex := int32(pads[activePadIndex].SoundType)
+
 	return g.Column(
 		g.Label(fmt.Sprintf("Pad %d settings:", activePadIndex+1)),
 		g.Dummy(30, 0),
 		g.Row(
 			g.Label("Sound Type"),
 			g.Combo("Sound Type", pads[activePadIndex].SoundType.String(), soundTypeStrings, &soundTypeSelectedIndex).Size(150).OnChange(func() {
-				pads[activePadIndex] = synth.NewRandom(soundTypes[currentSoundType], nil, sampleRate, bitDepth, channels)
+				pads[activePadIndex] = synth.NewRandom(soundTypes[soundTypeSelectedIndex], nil, sampleRate, bitDepth, channels)
+				pads[activePadIndex].SoundType = soundTypes[soundTypeSelectedIndex]
 			}),
 		),
 		g.Dummy(30, 0),
