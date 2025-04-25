@@ -674,6 +674,9 @@ func generateTrainingButtons() g.Widget {
 					setStatusMessage("Error: Failed to play WAV")
 				}
 			}),
+			g.Button("Quit").OnClick(func() {
+				os.Exit(0)
+			}),
 		)
 	}
 	return g.Dummy(0, 0)
