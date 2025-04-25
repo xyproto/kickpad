@@ -7,7 +7,7 @@ require (
 	github.com/go-audio/wav v1.1.0
 	github.com/mjibson/go-dsp v0.0.0-20180508042940-11479a337f12
 	github.com/xyproto/playsample v0.2.1
-	github.com/xyproto/synth v1.13.0
+	github.com/xyproto/synth v1.14.0
 )
 
 require (
@@ -23,8 +23,8 @@ require (
 	github.com/veandco/go-sdl2 v0.4.40 // indirect
 	github.com/xyproto/audioeffects v0.11.1 // indirect
 	github.com/xyproto/binary v1.3.3 // indirect
-	github.com/xyproto/env/v2 v2.5.0 // indirect
-	github.com/xyproto/files v1.7.0 // indirect
+	github.com/xyproto/env/v2 v2.5.3 // indirect
+	github.com/xyproto/files v1.9.0 // indirect
 	golang.design/x/hotkey v0.4.1 // indirect
 	golang.design/x/mainthread v0.3.0 // indirect
 	golang.org/x/image v0.20.0 // indirect
