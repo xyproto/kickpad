@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	versionString     = "Kickpad 1.5.4"
+	versionString     = "Kickpad 1.5.5"
 	channels          = 1
 	buttonSize        = 100
 	numPads           = 16
