@@ -578,16 +578,6 @@ func createSlidersForSelectedPad() g.Widget {
 					setStatusMessage(fmt.Sprintf("Error: Failed to play %s.", padSoundTypes[activePadIndex]))
 				}
 			}),
-			g.Button("Save").OnClick(func() {
-				pads[activePadIndex].SampleRate = sampleRate
-				pads[activePadIndex].BitDepth = bitDepth
-				fileName, err := pads[activePadIndex].GenerateAndSaveTo(".")
-				if err != nil {
-					setStatusMessage(fmt.Sprintf("Error: Failed to save %s to %s", padSoundTypes[activePadIndex], fileName))
-				} else {
-					setStatusMessage(fmt.Sprintf("%s saved to %s", padSoundTypes[activePadIndex], fileName))
-				}
-			}),
 			g.Button("Randomize").OnClick(func() {
 				var randomSoundType synth.SoundType = synth.Kick
 				if rand.Float64() < 0.5 {
@@ -625,6 +615,18 @@ func loop() {
 						err := loadWavFile()
 						if err != nil {
 							setStatusMessage("Failed to load .wav file")
+						}
+					}),
+					g.Button("Save").OnClick(func() {
+						pads[activePadIndex].SampleRate = sampleRate
+						pads[activePadIndex].BitDepth = bitDepth
+						fileName, err := pads[activePadIndex].GenerateAndSaveTo(".")
+						if err != nil {
+							setStatusMessage(fmt.Sprintf("Error: Failed to save %s to %s", padSoundTypes[activePadIndex], fileName))
+						} else {
+							os.Rename(fileName, wavFilePath)
+							fileName = wavFilePath
+							setStatusMessage(fmt.Sprintf("%s saved to %s", padSoundTypes[activePadIndex], fileName))
 						}
 					}),
 				),
