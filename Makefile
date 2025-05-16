@@ -1,7 +1,7 @@
 .PHONY: clean
 
 all:
-	go build -tags=enable_cimgui_sdl2 -mod=mod -trimpath
+	go build -tags=enable_cimgui_sdl2 -mod=mod -trimpath -v
 
 windows:
 	x86_64-w64-mingw32-windres kickpad.rc -O coff -o kickpad.syso
